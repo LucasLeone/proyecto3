@@ -1,0 +1,115 @@
+[flake8]
+# ===================================
+# Configuración General
+# ===================================
+
+# Máximo de caracteres por línea
+max-line-length = 120
+
+# Directorios a excluir
+exclude =
+    .git,
+    __pycache__,
+    */migrations/*,
+    venv,
+    env,
+    .venv,
+    staticfiles,
+    .pytest_cache,
+    .coverage,
+    htmlcov,
+    dist,
+    build,
+    *.egg-info
+
+# ===================================
+# MÉTRICA: Complejidad del Código
+# ===================================
+
+# Complejidad ciclomática máxima (McCabe)
+# 1-10: Simple, bajo riesgo
+# 11-20: Moderado, medio riesgo
+# 21+: Complejo, alto riesgo
+max-complexity = 10
+
+# ===================================
+# MÉTRICA: Buenas Prácticas
+# ===================================
+
+# Códigos de error a ignorar (específicos de Django)
+ignore = 
+    # E203: whitespace before ':' (conflicto con black)
+    E203,
+    # W503: line break before binary operator (permitido por PEP8)
+    W503,
+    # E501: line too long (ya lo manejamos con max-line-length)
+    E501
+
+# Códigos de error a seleccionar
+select = 
+    # pycodestyle errors
+    E,
+    # pycodestyle warnings
+    W,
+    # pyflakes
+    F,
+    # flake8-bugbear
+    B,
+    # McCabe complexity
+    C
+
+# ===================================
+# MÉTRICA: Vulnerabilidades
+# ===================================
+
+# Habilitar plugins adicionales
+enable-extensions = 
+    # flake8-bugbear (detecta bugs comunes)
+    B,
+    # flake8-django (reglas específicas de Django)
+    DJ
+
+# ===================================
+# Configuración de Reportes
+# ===================================
+
+# Formato de salida
+format = default
+
+# Mostrar código fuente de cada error
+show-source = True
+
+# Mostrar explicación de cada error
+show-pep8 = True
+
+# Contar errores
+count = True
+
+# Estadísticas al final
+statistics = True
+
+# Nivel de verbosidad
+verbose = 1
+
+# ===================================
+# Configuración específica por tipo de error
+# ===================================
+
+# flake8-bugbear configuración
+# B901: Using `return x` in a generator
+# B902: Invalid first argument used for method
+# B903: Use `collections.namedtuple` for data classes
+per-file-ignores =
+    # Permitir imports sin usar en __init__.py
+    __init__.py:F401,F403
+    # Permitir asserts en tests
+    **/tests/**.py:S101,
+    **/test_*.py:S101,
+    # Configuración de Django settings puede tener líneas largas
+    config/settings.py:E501,
+    # Las migraciones las genera Django automáticamente
+    */migrations/*.py:E501,F401,F403
+
+[mccabe]
+# Complejidad máxima de McCabe
+max-complexity = 10

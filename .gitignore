@@ -1,0 +1,42 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.sqlite3
+.DS_Store
+
+# Environment files
+.env
+.env.local
+backend/.env
+
+# Node artifacts
+node_modules/
+dist/
+
+# Django static collection
+backend/staticfiles/
+
+# IDE
+.idea/
+.vscode/
+
+# Análisis estático - Reportes temporales (no subir)
+frontend/INFORME_RESULTADOS_ANALISIS.md
+frontend/RESUMEN_EJECUTIVO.md
+frontend/VISUALIZACION_RESULTADOS.md
+frontend/GUIA_RAPIDA_ESLINT.md
+frontend/GUIA_CORRECCION_ERRORES.md
+frontend/PLANTILLA_INFORME_ACADEMICO.md
+backend/RESUMEN_EJECUTIVO_BACKEND.md
+backend/analisis-estatico-report.json
+
+# Análisis estático - Configuraciones y documentación (SÍ subir)
+# frontend/eslint.config.js
+# frontend/eslint-analysis.js
+# frontend/ANALISIS_ESTATICO.md
+# backend/analyze.py
+# backend/.pylintrc
+# backend/.flake8
+# backend/.bandit
+# backend/INFORME_ANALISIS_BACKEND.md
+# COMPARATIVA_FRONTEND_BACKEND.md
