@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
+import { Modal } from './Modal'
 
 export function EmployeesPanel({ token, areas }) {
   const [employees, setEmployees] = useState([])
@@ -7,6 +8,7 @@ export function EmployeesPanel({ token, areas }) {
   const [editingId, setEditingId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   const areaMap = useMemo(() => Object.fromEntries(areas.map((a) => [a.id, a.name])), [areas])
 
@@ -41,12 +43,19 @@ export function EmployeesPanel({ token, areas }) {
       }
       setForm({ full_name: '', email: '', password: '', area_id: '' })
       setEditingId(null)
+      setIsModalOpen(false)
       load()
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
+  }
+
+  const closeModal = () => {
+    setIsModalOpen(false)
+    setEditingId(null)
+    setForm({ full_name: '', email: '', password: '', area_id: '' })
   }
 
   const startEdit = (emp) => {
@@ -57,6 +66,7 @@ export function EmployeesPanel({ token, areas }) {
       password: '',
       area_id: emp.area_id || '',
     })
+    setIsModalOpen(true)
   }
 
   const handleDelete = async (id) => {
@@ -79,9 +89,13 @@ export function EmployeesPanel({ token, areas }) {
           <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Usuarios</p>
           <h2 className="text-xl font-semibold">Empleados</h2>
         </div>
-        <span className="rounded-full border border-sky-400/50 bg-sky-500/10 px-3 py-1 text-xs text-sky-100">
-          Admin
-        </span>
+        <button
+          type="button"
+          onClick={() => setIsModalOpen(true)}
+          className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-400"
+        >
+          + Registrar empleado
+        </button>
       </div>
 
       {error ? (
@@ -89,66 +103,6 @@ export function EmployeesPanel({ token, areas }) {
           {error}
         </div>
       ) : null}
-
-      <form className="grid gap-3 md:grid-cols-2" onSubmit={handleSubmit}>
-        <input
-          className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm"
-          placeholder="Nombre y apellido"
-          value={form.full_name}
-          onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
-          required
-        />
-        <input
-          className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm"
-          placeholder="Email"
-          type="email"
-          value={form.email}
-          onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-          required
-        />
-        <input
-          className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm"
-          placeholder={editingId ? 'Contraseña (opcional)' : 'Contraseña'}
-          type="password"
-          value={form.password}
-          onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-          required={!editingId}
-        />
-        <select
-          className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm"
-          value={form.area_id}
-          onChange={(e) => setForm((f) => ({ ...f, area_id: e.target.value }))}
-          required
-        >
-          <option value="">Asignar área</option>
-          {areas.map((area) => (
-            <option key={area.id} value={area.id}>
-              {area.name}
-            </option>
-          ))}
-        </select>
-        <div className="md:col-span-2 flex gap-3">
-          <button
-            type="submit"
-            disabled={loading}
-            className="rounded-lg bg-emerald-500 px-4 py-3 text-sm font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-60"
-          >
-            {editingId ? 'Actualizar empleado' : 'Crear empleado'}
-          </button>
-          {editingId ? (
-            <button
-              type="button"
-              onClick={() => {
-                setEditingId(null)
-                setForm({ full_name: '', email: '', password: '', area_id: '' })
-              }}
-              className="rounded-lg border border-slate-700 px-4 py-3 text-sm text-slate-200 hover:border-slate-500"
-            >
-              Cancelar
-            </button>
-          ) : null}
-        </div>
-      </form>
 
       <div className="overflow-auto rounded-xl border border-slate-800">
         <table className="min-w-full divide-y divide-slate-800">
@@ -196,6 +150,89 @@ export function EmployeesPanel({ token, areas }) {
           </tbody>
         </table>
       </div>
+
+      {isModalOpen ? (
+        <Modal isOpen={isModalOpen} onClose={closeModal} title={editingId ? 'Editar empleado' : 'Registrar empleado'}>
+          <form className="grid gap-4" onSubmit={handleSubmit}>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Nombre y apellido
+              </label>
+              <input
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/20"
+                placeholder="Ej: Juan Pérez"
+                value={form.full_name}
+                onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Email
+              </label>
+              <input
+                type="email"
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/20"
+                placeholder="Ej: juan@empresa.com"
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Contraseña {editingId ? '(dejar vacío para no cambiar)' : ''}
+              </label>
+              <input
+                type="password"
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/20"
+                placeholder={editingId ? 'Opcional' : 'Contraseña'}
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                required={!editingId}
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Área asignada
+              </label>
+              <select
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/20"
+                value={form.area_id}
+                onChange={(e) => setForm((f) => ({ ...f, area_id: e.target.value }))}
+                required
+              >
+                <option value="">Seleccionar área</option>
+                {areas.map((area) => (
+                  <option key={area.id} value={area.id}>
+                    {area.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 rounded-lg bg-emerald-500 px-4 py-3 text-sm font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-60"
+              >
+                {editingId ? 'Actualizar empleado' : 'Crear empleado'}
+              </button>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="rounded-lg border border-slate-700 px-4 py-3 text-sm text-slate-200 hover:border-slate-500"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
     </div>
   )
 }

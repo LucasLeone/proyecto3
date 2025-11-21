@@ -1,0 +1,223 @@
+import { useState, useEffect } from 'react'
+import { Modal } from './Modal'
+
+export function ManageClaimModal({
+  isOpen,
+  onClose,
+  claim,
+  areas,
+  statusOptions,
+  priorityOptions,
+  onUpdate,
+  actionDescription,
+  setActionDescription,
+  onSubmitAction,
+  loading,
+}) {
+  const [localStatus, setLocalStatus] = useState('')
+  const [localPriority, setLocalPriority] = useState('')
+  const [localAreaId, setLocalAreaId] = useState('')
+  const [reason, setReason] = useState('')
+  const [subArea, setSubArea] = useState('')
+
+  useEffect(() => {
+    if (claim) {
+      setLocalStatus(claim.status)
+      setLocalPriority(claim.priority || 'Media')
+      setLocalAreaId(claim.area_id || '')
+      setSubArea(claim.sub_area || '')
+      setReason('')
+    }
+  }, [claim])
+
+  if (!claim) return null
+
+  const isResolved = claim.status === 'Resuelto'
+  
+  const hasChanges = () => {
+    return (
+      localStatus !== claim.status ||
+      localPriority !== (claim.priority || 'Media') ||
+      localAreaId !== (claim.area_id || '') ||
+      subArea !== (claim.sub_area || '') ||
+      actionDescription.trim() !== ''
+    )
+  }
+
+  const handleSaveAll = async () => {
+    const updates = {}
+    
+    // Validar motivo de derivación si cambió el área
+    const hadArea = Boolean(claim.area_id)
+    const areaChanged = localAreaId !== (claim.area_id || '')
+    if (hadArea && areaChanged && !reason.trim()) {
+      alert('La derivación de área requiere un motivo')
+      return
+    }
+
+    // Estado
+    if (localStatus !== claim.status) {
+      updates.status = localStatus
+    }
+
+    // Prioridad
+    if (localPriority !== (claim.priority || 'Media')) {
+      updates.priority = localPriority
+    }
+
+    // Área
+    if (areaChanged) {
+      updates.area_id = localAreaId || null
+      updates.reason = reason
+    }
+
+    // Sub-área
+    if (subArea !== (claim.sub_area || '')) {
+      updates.sub_area = subArea
+    }
+
+    // Aplicar cambios al claim
+    if (Object.keys(updates).length > 0) {
+      await onUpdate(claim.id, updates)
+    }
+
+    // Registrar acción si hay descripción
+    if (actionDescription.trim()) {
+      await onSubmitAction()
+    }
+
+    // Cerrar modal después de guardar
+    onClose()
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Gestionar Reclamo">
+      <div className="space-y-4 max-h-[70vh] overflow-y-auto px-1">
+        {/* Primera fila: Estado y Prioridad */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <label className="text-sm font-medium text-slate-200">Estado</label>
+            <select
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none disabled:opacity-50"
+              value={localStatus}
+              onChange={(e) => setLocalStatus(e.target.value)}
+              disabled={isResolved || loading}
+            >
+              {statusOptions.map((st) => (
+                <option key={st} value={st}>
+                  {st}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid gap-2">
+            <label className="text-sm font-medium text-slate-200">Prioridad</label>
+            <select
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none disabled:opacity-50"
+              value={localPriority}
+              onChange={(e) => setLocalPriority(e.target.value)}
+              disabled={isResolved || loading}
+            >
+              {priorityOptions.map((pr) => (
+                <option key={pr} value={pr}>
+                  {pr}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Segunda fila: Área y Sub-área */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-2">
+            <label className="text-sm font-medium text-slate-200">
+              Área <span className="text-xs text-slate-400">(requiere motivo al cambiar)</span>
+            </label>
+            <select
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none disabled:opacity-50"
+              value={localAreaId}
+              onChange={(e) => setLocalAreaId(e.target.value)}
+              disabled={isResolved || loading}
+            >
+              <option value="">Sin asignar</option>
+              {areas.map((area) => (
+                <option key={area.id} value={area.id}>
+                  {area.name}
+                </option>
+              ))}
+            </select>
+            <input
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-none disabled:opacity-50"
+              placeholder="Motivo de derivación"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              disabled={isResolved || loading}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <label className="text-sm font-medium text-slate-200">
+              Sub-área <span className="text-xs text-slate-400">(no visible al cliente)</span>
+            </label>
+            <input
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-none disabled:opacity-50"
+              placeholder="Ej: Infraestructura, Base de datos..."
+              value={subArea}
+              onChange={(e) => setSubArea(e.target.value)}
+              disabled={isResolved || loading}
+            />
+          </div>
+        </div>
+
+        {/* Registrar acción - ancho completo */}
+        <div className="pt-3 border-t border-slate-700">
+          <label className="text-sm font-medium text-slate-200 block mb-2">Registrar acción realizada (opcional)</label>
+          <textarea
+            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-none resize-none disabled:opacity-50"
+            placeholder="Ej: Revisé los logs del sistema, Apliqué parche de seguridad, etc."
+            rows={3}
+            value={actionDescription}
+            onChange={(e) => setActionDescription(e.target.value)}
+            disabled={isResolved || loading}
+          />
+        </div>
+
+        {/* Botón único de guardar */}
+        <div className="pt-4 border-t border-slate-700 flex gap-3 justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-lg border border-slate-700 bg-slate-800 px-6 py-2.5 text-sm font-medium text-slate-100 hover:bg-slate-700 disabled:opacity-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={handleSaveAll}
+            disabled={!hasChanges() || isResolved || loading}
+            className="rounded-lg bg-sky-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          >
+            {loading ? (
+              <>
+                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Guardando...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Guardar cambios
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}

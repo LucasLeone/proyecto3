@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { Modal } from './Modal'
 
 export function AreasPanel({ token, readOnly = false, onChange }) {
   const [areas, setAreas] = useState([])
@@ -7,6 +8,7 @@ export function AreasPanel({ token, readOnly = false, onChange }) {
   const [editingId, setEditingId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -39,6 +41,7 @@ export function AreasPanel({ token, readOnly = false, onChange }) {
       }
       setForm({ name: '', description: '' })
       setEditingId(null)
+      setIsModalOpen(false)
       load()
     } catch (err) {
       setError(err.message)
@@ -47,9 +50,16 @@ export function AreasPanel({ token, readOnly = false, onChange }) {
     }
   }
 
+  const closeModal = () => {
+    setIsModalOpen(false)
+    setEditingId(null)
+    setForm({ name: '', description: '' })
+  }
+
   const startEdit = (area) => {
     setEditingId(area.id)
     setForm({ name: area.name, description: area.description || '' })
+    setIsModalOpen(true)
   }
 
   const handleDelete = async (id) => {
@@ -74,55 +84,24 @@ export function AreasPanel({ token, readOnly = false, onChange }) {
           <h2 className="text-xl font-semibold">Áreas</h2>
         </div>
         {!readOnly ? (
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+            className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-sky-400"
+          >
+            + Registrar área
+          </button>
+        ) : (
           <span className="rounded-full border border-sky-400/50 bg-sky-500/10 px-3 py-1 text-xs text-sky-100">
-            Admin
+            Consulta
           </span>
-        ) : null}
+        )}
       </div>
 
       {error ? (
         <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {error}
         </div>
-      ) : null}
-
-      {!readOnly ? (
-        <form className="grid gap-3 md:grid-cols-2" onSubmit={handleSubmit}>
-          <input
-            className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm"
-            placeholder="Nombre del área"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            required
-          />
-          <input
-            className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm md:col-span-1"
-            placeholder="Descripción"
-            value={form.description}
-            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-          />
-          <div className="md:col-span-2 flex gap-3">
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-lg bg-sky-500 px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-sky-400 disabled:opacity-60"
-            >
-              {editingId ? 'Actualizar área' : 'Crear área'}
-            </button>
-            {editingId ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingId(null)
-                  setForm({ name: '', description: '' })
-                }}
-                className="rounded-lg border border-slate-700 px-4 py-3 text-sm text-slate-200 hover:border-slate-500"
-              >
-                Cancelar
-              </button>
-            ) : null}
-          </div>
-        </form>
       ) : null}
 
       <div className="overflow-auto rounded-xl border border-slate-800">
@@ -173,6 +152,54 @@ export function AreasPanel({ token, readOnly = false, onChange }) {
           </tbody>
         </table>
       </div>
+
+      {isModalOpen ? (
+        <Modal isOpen={isModalOpen} onClose={closeModal} title={editingId ? 'Editar área' : 'Registrar área'}>
+          <form className="grid gap-4" onSubmit={handleSubmit}>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Nombre del área
+              </label>
+              <input
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20"
+                placeholder="Ej: Soporte técnico"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Descripción
+              </label>
+              <input
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/20"
+                placeholder="Ej: Área encargada del mantenimiento..."
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 rounded-lg bg-sky-500 px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-sky-400 disabled:opacity-60"
+              >
+                {editingId ? 'Actualizar área' : 'Crear área'}
+              </button>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="rounded-lg border border-slate-700 px-4 py-3 text-sm text-slate-200 hover:border-slate-500"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
     </div>
   )
 }

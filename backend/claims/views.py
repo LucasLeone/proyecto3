@@ -8,6 +8,7 @@ from .permissions import IsAdmin, IsAdminOrEmployee, IsAuthenticated
 from .repositories import (
     ALLOWED_PRIORITIES,
     ALLOWED_STATUSES,
+    add_claim_action,
     add_claim_comment,
     create_claim,
     create_area,
@@ -198,7 +199,7 @@ class EmployeeDetailView(APIView):
 
 
 class ClientListCreateView(APIView):
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAdminOrEmployee]
 
     def get(self, request):
         clients = list_users(role="client")
@@ -272,7 +273,6 @@ class ProjectListCreateView(APIView):
             project = create_project(
                 name=serializer.validated_data["name"],
                 project_type=serializer.validated_data["project_type"],
-                status=serializer.validated_data["status"],
                 client_id=serializer.validated_data["client_id"],
             )
         except ValueError as exc:
@@ -329,7 +329,9 @@ class ClaimListCreateView(APIView):
             data["project_id"] = str(claim["project_id"])
             data["area_id"] = str(claim["area_id"]) if claim.get("area_id") else None
             data["created_by"] = str(claim["created_by"])
-            data["client_id"] = str(claim["created_by"])
+            # Obtener el client_id del proyecto asociado
+            project = get_project(claim["project_id"])
+            data["client_id"] = str(project["client_id"]) if project and project.get("client_id") else str(claim["created_by"])
             if getattr(request.user, "role", None) == "client":
                 data.pop("sub_area", None)
             return data
@@ -348,6 +350,7 @@ class ClaimListCreateView(APIView):
                 project_id=serializer.validated_data["project_id"],
                 claim_type=serializer.validated_data["claim_type"],
                 urgency=serializer.validated_data["urgency"],
+                severity=serializer.validated_data.get("severity", "S3 - Medio"),
                 description=serializer.validated_data["description"],
                 created_by=request.user.id,
             )
@@ -358,6 +361,9 @@ class ClaimListCreateView(APIView):
         data["project_id"] = str(created["project_id"])
         data["area_id"] = str(created["area_id"]) if created.get("area_id") else None
         data["created_by"] = str(created["created_by"])
+        # Obtener el client_id del proyecto asociado
+        project = get_project(created["project_id"])
+        data["client_id"] = str(project["client_id"]) if project and project.get("client_id") else str(created["created_by"])
         return Response(data, status=status.HTTP_201_CREATED)
 
 
@@ -377,6 +383,9 @@ class ClaimDetailView(APIView):
         data["project_id"] = str(claim["project_id"])
         data["area_id"] = str(claim["area_id"]) if claim.get("area_id") else None
         data["created_by"] = str(claim["created_by"])
+        # Obtener el client_id del proyecto asociado
+        project = get_project(claim["project_id"])
+        data["client_id"] = str(project["client_id"]) if project and project.get("client_id") else str(claim["created_by"])
         if role == "client":
             data.pop("sub_area", None)
         return Response(data)
@@ -411,7 +420,9 @@ class ClaimDetailView(APIView):
         data["project_id"] = str(updated["project_id"])
         data["area_id"] = str(updated["area_id"]) if updated.get("area_id") else None
         data["created_by"] = str(updated["created_by"])
-        data["client_id"] = str(updated["created_by"])
+        # Obtener el client_id del proyecto asociado
+        project = get_project(updated["project_id"])
+        data["client_id"] = str(project["client_id"]) if project and project.get("client_id") else str(updated["created_by"])
         return Response(data)
 
 
@@ -428,6 +439,25 @@ class ClaimCommentView(APIView):
                 actor_id=request.user.id,
                 actor_role=getattr(request.user, "role", None),
                 comment=comment,
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_201_CREATED)
+
+
+class ClaimActionView(APIView):
+    permission_classes = [IsAdminOrEmployee]
+
+    def post(self, request, claim_id: str):
+        action_description = request.data.get("action_description", "").strip()
+        if not action_description:
+            return Response({"detail": "La descripción de la acción es obligatoria"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            add_claim_action(
+                claim_id=claim_id,
+                actor_id=request.user.id,
+                actor_role=getattr(request.user, "role", None),
+                action_description=action_description,
             )
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)

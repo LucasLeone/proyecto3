@@ -116,4 +116,7 @@ export const api = {
   addComment(token, id, comment) {
     return request(`/claims/${id}/comments/`, { method: 'POST', body: { comment }, token })
   },
+  addAction(token, id, action_description) {
+    return request(`/claims/${id}/actions/`, { method: 'POST', body: { action_description }, token })
+  },
 }

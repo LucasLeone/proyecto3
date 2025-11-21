@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
+import { Timeline } from './Timeline'
+import { Modal } from './Modal'
+import { ChatModal } from './ChatModal'
+import { ManageClaimModal } from './ManageClaimModal'
 
 const statusOptions = ['Ingresado', 'En Proceso', 'Resuelto']
 const priorityOptions = ['Baja', 'Media', 'Alta']
 
-export function ClaimsPanel({ token, areas, projects, clients }) {
+export function ClaimsPanel({ token, areas, projects, clients, user }) {
   const [claims, setClaims] = useState([])
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterClient, setFilterClient] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [selectedId, setSelectedId] = useState(null)
@@ -15,6 +20,9 @@ export function ClaimsPanel({ token, areas, projects, clients }) {
   const [comment, setComment] = useState('')
   const [reason, setReason] = useState('')
   const [subArea, setSubArea] = useState('')
+  const [actionDescription, setActionDescription] = useState('')
+  const [isChatModalOpen, setIsChatModalOpen] = useState(false)
+  const [isManageModalOpen, setIsManageModalOpen] = useState(false)
 
   const projectMap = useMemo(
     () => Object.fromEntries(projects.map((p) => [p.id, p.name])),
@@ -25,6 +33,14 @@ export function ClaimsPanel({ token, areas, projects, clients }) {
     [clients],
   )
   const areaMap = useMemo(() => Object.fromEntries(areas.map((a) => [a.id, a.name])), [areas])
+
+  const filteredClaims = useMemo(() => {
+    return claims.filter(claim => {
+      if (filterStatus && claim.status !== filterStatus) return false
+      if (filterClient && claim.client_id !== filterClient && claim.created_by !== filterClient) return false
+      return true
+    })
+  }, [claims, filterStatus, filterClient])
 
   const selected = claims.find((c) => c.id === selectedId) || null
 
@@ -70,10 +86,13 @@ export function ClaimsPanel({ token, areas, projects, clients }) {
     setLoading(true)
     setError(null)
     try {
-      await api.updateClaim(token, id, payload)
+      const updated = await api.updateClaim(token, id, payload)
       setReason('')
       setSubArea('')
-      await Promise.all([load(), loadTimeline(id)])
+      // Actualizar el claim en la lista local inmediatamente
+      setClaims(prev => prev.map(c => c.id === id ? updated : c))
+      // Recargar timeline para mostrar el nuevo evento
+      await loadTimeline(id)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -96,17 +115,35 @@ export function ClaimsPanel({ token, areas, projects, clients }) {
     }
   }
 
+  const submitAction = async () => {
+    if (!actionDescription.trim() || !selectedId) return
+    setLoading(true)
+    setError(null)
+    try {
+      await api.addAction(token, selectedId, actionDescription.trim())
+      setActionDescription('')
+      loadTimeline(selectedId)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-4">
+    <div className="space-y-6">
+      <div className="space-y-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Reclamos</p>
             <h2 className="text-xl font-semibold">Asignación y triaje</h2>
           </div>
-          <div className="flex gap-2 items-center">
+        </div>
+
+        <div className="flex gap-3 flex-wrap">
+          <div>
             <select
-              className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm"
+              className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-2 text-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
             >
@@ -117,13 +154,39 @@ export function ClaimsPanel({ token, areas, projects, clients }) {
                 </option>
               ))}
             </select>
-            <button
-              onClick={load}
-              className="rounded-lg border border-slate-700 px-3 py-2 text-sm hover:border-slate-500"
-            >
-              Actualizar
-            </button>
           </div>
+          <div>
+            <select
+              className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-2 text-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+              value={filterClient}
+              onChange={(e) => setFilterClient(e.target.value)}
+            >
+              <option value="">Todos los clientes</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.company_name || c.email}
+                </option>
+              ))}
+            </select>
+          </div>
+          {(filterStatus || filterClient) && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterStatus('')
+                setFilterClient('')
+              }}
+              className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:border-slate-500"
+            >
+              Limpiar filtros
+            </button>
+          )}
+          <button
+            onClick={load}
+            className="rounded-lg border border-slate-700 px-3 py-2 text-sm hover:border-slate-500"
+          >
+            Actualizar
+          </button>
         </div>
 
         {error ? (
@@ -140,6 +203,7 @@ export function ClaimsPanel({ token, areas, projects, clients }) {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Proyecto</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Tipo</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Urgencia</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Criticidad</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Estado</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Cliente</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Área</th>
@@ -147,7 +211,7 @@ export function ClaimsPanel({ token, areas, projects, clients }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {claims.map((claim) => (
+              {filteredClaims.map((claim) => (
                 <tr key={claim.id} className="hover:bg-slate-900/60">
                   <td className="px-4 py-3 text-sm text-slate-200">
                     <span className="font-mono text-xs">{claim.id.slice(0, 8)}</span>
@@ -157,6 +221,9 @@ export function ClaimsPanel({ token, areas, projects, clients }) {
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-200">{claim.claim_type}</td>
                   <td className="px-4 py-3 text-sm text-slate-300">{claim.urgency}</td>
+                  <td className="px-4 py-3 text-sm text-slate-300">
+                    <span className="text-xs">{claim.severity || 'N/D'}</span>
+                  </td>
                   <td className="px-4 py-3 text-sm text-slate-300">
                     <span className="rounded-full border border-slate-700 px-3 py-1 text-xs">
                       {claim.status}
@@ -183,10 +250,10 @@ export function ClaimsPanel({ token, areas, projects, clients }) {
                   </td>
                 </tr>
               ))}
-              {claims.length === 0 ? (
+              {filteredClaims.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-4 text-center text-sm text-slate-400">
-                    No hay reclamos cargados
+                  <td colSpan={9} className="px-4 py-4 text-center text-sm text-slate-400">
+                    {filterStatus || filterClient ? 'No hay reclamos que coincidan con los filtros' : 'No hay reclamos cargados'}
                   </td>
                 </tr>
               ) : null}
@@ -195,176 +262,118 @@ export function ClaimsPanel({ token, areas, projects, clients }) {
         </div>
       </div>
 
-      <div className="space-y-4">
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-lg">
-          <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Detalle</p>
-          <h3 className="text-lg font-semibold mb-3">Reclamo seleccionado</h3>
+      {selectedId && selected && (
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-lg">
+            <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Detalle</p>
+            <h3 className="text-lg font-semibold mb-4">Reclamo seleccionado</h3>
 
-          {!selected ? (
-            <p className="text-sm text-slate-400">Selecciona un reclamo para gestionarlo.</p>
-          ) : (
-            <div className="space-y-3">
-              <div className="text-sm">
-                <p className="text-slate-400">Proyecto</p>
-                <p className="font-semibold text-slate-100">
-                  {projectMap[selected.project_id] || selected.project_id}
-                </p>
-                <p className="text-xs text-slate-400">
-                  Cliente: {clientMap[selected.created_by] || selected.created_by || 'N/D'}
-                </p>
-              </div>
-              <div className="grid gap-3">
-                <label className="text-sm text-slate-200">Estado</label>
-                <select
-                  className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm"
-                  value={selected.status}
-                  onChange={(e) => updateClaim(selected.id, { status: e.target.value })}
-                  disabled={selected.status === 'Resuelto' || loading}
-                >
-                  {statusOptions.map((st) => (
-                    <option key={st} value={st}>
-                      {st}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid gap-3">
-                <label className="text-sm text-slate-200">Prioridad</label>
-                <select
-                  className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm"
-                  value={selected.priority || 'Media'}
-                  onChange={(e) => updateClaim(selected.id, { priority: e.target.value })}
-                  disabled={selected.status === 'Resuelto' || loading}
-                >
-                  {priorityOptions.map((pr) => (
-                    <option key={pr} value={pr}>
-                      {pr}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid gap-2">
-                <label className="text-sm text-slate-200">Área (reasignación requiere motivo)</label>
-                <select
-                  className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm"
-                  value={selected.area_id || ''}
-                  onChange={(e) => {
-                    const newArea = e.target.value
-                    const hadArea = Boolean(selected.area_id)
-                    if (hadArea && newArea !== selected.area_id && !reason.trim()) {
-                      setError('Ingresá un motivo de derivación')
-                      return
-                    }
-                    updateClaim(selected.id, { area_id: newArea || null, reason })
-                  }}
-                  disabled={selected.status === 'Resuelto' || loading}
-                >
-                  <option value="">Sin asignar</option>
-                  {areas.map((area) => (
-                    <option key={area.id} value={area.id}>
-                      {area.name}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm"
-                  placeholder="Motivo de derivación"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  disabled={selected.status === 'Resuelto' || loading}
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <label className="text-sm text-slate-200">Sub-área interna</label>
-                <input
-                  className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm"
-                  placeholder="Sub-área (no visible al cliente)"
-                  value={subArea}
-                  onChange={(e) => setSubArea(e.target.value)}
-                  disabled={selected.status === 'Resuelto' || loading}
-                />
-                <button
-                  type="button"
-                  onClick={() => updateClaim(selected.id, { sub_area: subArea })}
-                  disabled={selected.status === 'Resuelto' || loading}
-                  className="rounded-lg border border-slate-700 px-3 py-2 text-sm hover:border-slate-500"
-                >
-                  Guardar sub-área
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-lg">
-          <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-slate-100">Comentarios internos</h4>
-          </div>
-          {!selected ? (
-            <p className="text-sm text-slate-400 mt-2">Selecciona un reclamo.</p>
-          ) : (
-            <div className="space-y-3">
-              <div className="max-h-60 overflow-y-auto space-y-2 text-sm">
-                {timeline
-                  .filter((ev) => ev.action === 'comment')
-                  .map((ev) => (
-                    <div key={ev.id} className="rounded-lg border border-slate-800 px-3 py-2">
-                      <p className="text-slate-200">{ev.details?.comment}</p>
-                      <p className="text-xs text-slate-500">
-                        {new Date(ev.created_at).toLocaleString()} · {ev.actor_role || '—'}
-                      </p>
-                    </div>
-                  ))}
-                {timeline.filter((ev) => ev.action === 'comment').length === 0 ? (
-                  <p className="text-xs text-slate-500">Sin comentarios</p>
-                ) : null}
-              </div>
-              <textarea
-                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm"
-                rows={3}
-                placeholder="Agregar nota interna"
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                disabled={selected?.status === 'Resuelto' || loading}
-              />
-              <button
-                type="button"
-                onClick={submitComment}
-          disabled={!comment.trim() || selected?.status === 'Resuelto' || loading}
-          className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-sky-400 disabled:opacity-60"
-        >
-          Guardar comentario
-        </button>
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-lg">
-          <h4 className="text-sm font-semibold text-slate-100 mb-2">Timeline interno</h4>
-          {!selected ? (
-            <p className="text-sm text-slate-400">Selecciona un reclamo.</p>
-          ) : (
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {timeline.map((ev) => (
-                <div key={ev.id} className="rounded-lg border border-slate-800 px-3 py-2 text-sm">
-                  <p className="text-slate-200">
-                    {ev.action} · {ev.details ? JSON.stringify(ev.details) : ''}
+            <div className="space-y-4">
+              {/* Información de lectura */}
+              <div className="text-sm space-y-3">
+                <div>
+                  <p className="text-slate-400">Proyecto</p>
+                  <p className="font-semibold text-slate-100">
+                    {projectMap[selected.project_id] || selected.project_id}
                   </p>
-                  <p className="text-xs text-slate-500">
-                    {new Date(ev.created_at).toLocaleString()} · {ev.actor_role || '—'}
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Cliente: {clientMap[selected.created_by] || selected.created_by || 'N/D'}
                   </p>
                 </div>
-              ))}
-              {timeline.length === 0 ? (
-                <p className="text-xs text-slate-500">Sin eventos</p>
-              ) : null}
+
+                <div>
+                  <p className="text-slate-400">Estado actual</p>
+                  <p className="font-semibold text-slate-100">{selected.status}</p>
+                </div>
+
+                <div>
+                  <p className="text-slate-400">Prioridad</p>
+                  <p className="font-semibold text-slate-100">{selected.priority || 'Media'}</p>
+                </div>
+
+                <div>
+                  <p className="text-slate-400">Área asignada</p>
+                  <p className="font-semibold text-slate-100">
+                    {selected.area_id ? areaMap[selected.area_id] || 'Sin nombre' : 'Sin asignar'}
+                  </p>
+                </div>
+
+                {selected.sub_area && (
+                  <div>
+                    <p className="text-slate-400">Sub-área</p>
+                    <p className="font-semibold text-slate-100">{selected.sub_area}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Botones de acción */}
+              <div className="pt-3 border-t border-slate-800">
+                <label className="text-sm text-slate-200 block mb-2">Acciones rápidas</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsChatModalOpen(true)}
+                    disabled={loading}
+                    className="rounded-lg border border-sky-700 bg-sky-900/30 px-3 py-2 text-sm text-sky-100 hover:bg-sky-900/50 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                    Chat Interno
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsManageModalOpen(true)}
+                    disabled={loading}
+                    className="rounded-lg border border-violet-700 bg-violet-900/30 px-3 py-2 text-sm text-violet-100 hover:bg-violet-900/50 disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Gestionar Reclamo
+                  </button>
+                </div>
+              </div>
             </div>
-          )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-lg md:col-span-3">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-slate-100">Timeline completo</h3>
+              <p className="text-sm text-slate-400">Historial detallado de todas las acciones realizadas</p>
+            </div>
+            <Timeline events={timeline} isPublic={false} />
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Chat Modal */}
+      <ChatModal
+        isOpen={isChatModalOpen}
+        onClose={() => setIsChatModalOpen(false)}
+        comments={timeline.filter((ev) => ev.action === 'comment')}
+        currentUser={user}
+        newComment={comment}
+        setNewComment={setComment}
+        onSubmit={submitComment}
+        loading={loading}
+      />
+
+      {/* Manage Claim Modal */}
+      <ManageClaimModal
+        isOpen={isManageModalOpen}
+        onClose={() => setIsManageModalOpen(false)}
+        claim={selected}
+        areas={areas}
+        statusOptions={statusOptions}
+        priorityOptions={priorityOptions}
+        onUpdate={updateClaim}
+        actionDescription={actionDescription}
+        setActionDescription={setActionDescription}
+        onSubmitAction={submitAction}
+        loading={loading}
+      />
     </div>
   )
 }
