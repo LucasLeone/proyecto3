@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
+import { Modal } from './Modal'
 
-export function ProjectsPanel({ token, role, clients }) {
+export function ProjectsPanel({ token, role, clients, currentUser }) {
   const [projects, setProjects] = useState([])
-  const [form, setForm] = useState({ name: '', project_type: '', status: '', client_id: '' })
+  const [form, setForm] = useState({ name: '', project_type: '', client_id: '' })
   const [editingId, setEditingId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   const clientMap = useMemo(
     () => Object.fromEntries(clients.map((c) => [c.id, c.company_name || c.email])),
@@ -40,8 +42,9 @@ export function ProjectsPanel({ token, role, clients }) {
       } else {
         await api.createProject(token, form)
       }
-      setForm({ name: '', project_type: '', status: '', client_id: '' })
+      setForm({ name: '', project_type: '', client_id: '' })
       setEditingId(null)
+      setIsModalOpen(false)
       load()
     } catch (err) {
       setError(err.message)
@@ -55,12 +58,13 @@ export function ProjectsPanel({ token, role, clients }) {
     setForm({
       name: project.name || '',
       project_type: project.project_type || '',
-      status: project.status || '',
       client_id: project.client_id || '',
     })
+    setIsModalOpen(true)
   }
 
   const handleDelete = async (id) => {
+    if (!confirm('¿Estás seguro de eliminar este proyecto?')) return
     setLoading(true)
     setError(null)
     try {
@@ -73,6 +77,13 @@ export function ProjectsPanel({ token, role, clients }) {
     }
   }
 
+  const closeModal = () => {
+    setIsModalOpen(false)
+    setEditingId(null)
+    setForm({ name: '', project_type: '', client_id: '' })
+    setError(null)
+  }
+
   const admin = role === 'admin'
   const isClient = role === 'client'
 
@@ -83,75 +94,24 @@ export function ProjectsPanel({ token, role, clients }) {
           <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Proyectos</p>
           <h2 className="text-xl font-semibold">{admin ? 'Gestión' : 'Listado'}</h2>
         </div>
-        <span className="rounded-full border border-emerald-400/50 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100">
-          {admin ? 'Admin' : 'Consulta'}
-        </span>
+        {admin ? (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400 transition-colors"
+          >
+            + Registrar proyecto
+          </button>
+        ) : (
+          <span className="rounded-full border border-emerald-400/50 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100">
+            Consulta
+          </span>
+        )}
       </div>
 
-      {error ? (
+      {error && !isModalOpen ? (
         <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {error}
         </div>
-      ) : null}
-
-      {admin ? (
-        <form className="grid gap-3 md:grid-cols-2" onSubmit={handleSubmit}>
-          <input
-            className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm"
-            placeholder="Nombre del proyecto"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            required
-          />
-          <input
-            className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm"
-            placeholder="Tipo"
-            value={form.project_type}
-            onChange={(e) => setForm((f) => ({ ...f, project_type: e.target.value }))}
-            required
-          />
-          <input
-            className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm"
-            placeholder="Estado (ej: En proceso)"
-            value={form.status}
-            onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-            required
-          />
-          <select
-            className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm"
-            value={form.client_id}
-            onChange={(e) => setForm((f) => ({ ...f, client_id: e.target.value }))}
-            required
-          >
-            <option value="">Asignar cliente</option>
-            {clients.map((client) => (
-              <option key={client.id} value={client.id}>
-                {client.company_name || client.email}
-              </option>
-            ))}
-          </select>
-          <div className="md:col-span-2 flex gap-3">
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-lg bg-violet-400 px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-violet-300 disabled:opacity-60"
-            >
-              {editingId ? 'Actualizar proyecto' : 'Crear proyecto'}
-            </button>
-            {editingId ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingId(null)
-                  setForm({ name: '', project_type: '', status: '', client_id: '' })
-                }}
-                className="rounded-lg border border-slate-700 px-4 py-3 text-sm text-slate-200 hover:border-slate-500"
-              >
-                Cancelar
-              </button>
-            ) : null}
-          </div>
-        </form>
       ) : null}
 
       <div className="overflow-auto rounded-xl border border-slate-800">
@@ -160,7 +120,6 @@ export function ProjectsPanel({ token, role, clients }) {
             <tr>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Proyecto</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Tipo</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Estado</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Cliente</th>
               {admin ? <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Acciones</th> : null}
             </tr>
@@ -170,9 +129,10 @@ export function ProjectsPanel({ token, role, clients }) {
               <tr key={proj.id} className="hover:bg-slate-900/60">
                 <td className="px-4 py-3 text-sm">{proj.name}</td>
                 <td className="px-4 py-3 text-sm text-slate-300">{proj.project_type}</td>
-                <td className="px-4 py-3 text-sm text-slate-300">{proj.status}</td>
                 <td className="px-4 py-3 text-sm text-slate-300">
-                  {clientMap[proj.client_id] || (isClient ? 'Tu cuenta' : '—')}
+                  {isClient 
+                    ? (currentUser?.company_name || currentUser?.email || 'Mi cuenta')
+                    : (clientMap[proj.client_id] || '—')}
                 </td>
                 {admin ? (
                   <td className="px-4 py-3 text-sm">
@@ -198,7 +158,7 @@ export function ProjectsPanel({ token, role, clients }) {
             ))}
             {projects.length === 0 ? (
               <tr>
-                <td colSpan={admin ? 5 : 4} className="px-4 py-4 text-center text-sm text-slate-400">
+                <td colSpan={admin ? 4 : 3} className="px-4 py-4 text-center text-sm text-slate-400">
                   No hay proyectos cargados
                 </td>
               </tr>
@@ -206,6 +166,74 @@ export function ProjectsPanel({ token, role, clients }) {
           </tbody>
         </table>
       </div>
+
+      {isModalOpen ? (
+        <Modal isOpen={isModalOpen} onClose={closeModal} title={editingId ? 'Editar proyecto' : 'Registrar proyecto'}>
+          <form className="grid gap-4" onSubmit={handleSubmit}>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Nombre del proyecto
+              </label>
+              <input
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-400/20"
+                placeholder="Ej: Sistema de gestión"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Tipo de proyecto
+              </label>
+              <input
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-400/20"
+                placeholder="Ej: Desarrollo web"
+                value={form.project_type}
+                onChange={(e) => setForm((f) => ({ ...f, project_type: e.target.value }))}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Cliente asignado
+              </label>
+              <select
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-400/20"
+                value={form.client_id}
+                onChange={(e) => setForm((f) => ({ ...f, client_id: e.target.value }))}
+                required
+              >
+                <option value="">Seleccionar cliente</option>
+                {clients.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.company_name || client.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 rounded-lg bg-violet-400 px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-violet-300 disabled:opacity-60"
+              >
+                {editingId ? 'Actualizar proyecto' : 'Crear proyecto'}
+              </button>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="rounded-lg border border-slate-700 px-4 py-3 text-sm text-slate-200 hover:border-slate-500"
+              >
+                Cancelar
+              </button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
     </div>
   )
 }

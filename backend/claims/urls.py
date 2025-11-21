@@ -7,6 +7,7 @@ from .views import (
     ClientListCreateView,
     ClaimDetailView,
     ClaimListCreateView,
+    ClaimActionView,
     ClaimCommentView,
     ClaimTimelineView,
     EmployeeDetailView,
@@ -28,6 +29,7 @@ urlpatterns = [
     path("projects/<str:project_id>/", ProjectDetailView.as_view(), name="project-detail"),
     path("claims/", ClaimListCreateView.as_view(), name="claim-list"),
     path("claims/<str:claim_id>/", ClaimDetailView.as_view(), name="claim-detail"),
+    path("claims/<str:claim_id>/actions/", ClaimActionView.as_view(), name="claim-action"),
     path("claims/<str:claim_id>/comments/", ClaimCommentView.as_view(), name="claim-comment"),
     path("claims/<str:claim_id>/timeline/", ClaimTimelineView.as_view(), name="claim-timeline"),
 ]

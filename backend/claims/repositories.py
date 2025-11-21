@@ -163,12 +163,11 @@ def get_project(project_id: Any) -> Optional[Dict[str, Any]]:
     return serialize(doc)
 
 
-def create_project(*, name: str, project_type: str, status: str, client_id: str) -> Dict[str, Any]:
+def create_project(*, name: str, project_type: str, client_id: str) -> Dict[str, Any]:
     now = datetime.utcnow()
     payload = {
         "name": name.strip(),
         "project_type": project_type.strip(),
-        "status": status.strip(),
         "client_id": to_object_id(client_id),
         "is_active": True,
         "created_at": now,
@@ -197,7 +196,7 @@ def delete_project(project_id: str):
 # -------- Claims --------
 ALLOWED_STATUSES = ["Ingresado", "En Proceso", "Resuelto"]
 ALLOWED_PRIORITIES = ["Baja", "Media", "Alta"]
-PUBLIC_ACTIONS = {"created", "status_changed"}
+PUBLIC_ACTIONS = {"created", "status_changed", "area_changed"}
 
 
 def log_claim_event(
@@ -227,12 +226,67 @@ def list_claim_events(claim_id: Any, public_only: bool = False) -> List[Dict[str
         query["visibility"] = "public"
     events = get_audit_db().claim_events.find(query).sort("created_at", 1)
     results: List[Dict[str, Any]] = []
+    
+    # Caches para evitar lookups repetidos
+    user_cache: Dict[str, Optional[Dict[str, Any]]] = {}
+    area_cache: Dict[str, Optional[Dict[str, Any]]] = {}
+    
     for ev in events:
         data = serialize(ev)
         data["claim_id"] = str(ev["claim_id"])
+        
+        # Enriquecer con información del actor
         if ev.get("actor_id"):
-            data["actor_id"] = str(ev["actor_id"])
+            actor_id_str = str(ev["actor_id"])
+            data["actor_id"] = actor_id_str
+            
+            if actor_id_str not in user_cache:
+                user_doc = get_main_db().users.find_one({"_id": ev["actor_id"]})
+                user_cache[actor_id_str] = serialize(user_doc) if user_doc else None
+            
+            user = user_cache[actor_id_str]
+            if user:
+                data["actor_name"] = user.get("full_name") or user.get("email")
+        
+        # Enriquecer eventos de cambio de área con nombres de áreas
+        if ev.get("action") == "area_changed" and ev.get("details"):
+            details = ev["details"]
+            
+            # Área origen
+            if details.get("from"):
+                from_id = details["from"]
+                if from_id not in area_cache:
+                    area_doc = get_main_db().areas.find_one({"_id": to_object_id(from_id)})
+                    area_cache[from_id] = serialize(area_doc) if area_doc else None
+                
+                from_area = area_cache[from_id]
+                if from_area:
+                    data["details"]["from_area_name"] = from_area.get("name")
+            
+            # Área destino
+            if details.get("to"):
+                to_id = details["to"]
+                if to_id not in area_cache:
+                    area_doc = get_main_db().areas.find_one({"_id": to_object_id(to_id)})
+                    area_cache[to_id] = serialize(area_doc) if area_doc else None
+                
+                to_area = area_cache[to_id]
+                if to_area:
+                    data["details"]["to_area_name"] = to_area.get("name")
+            
+            # Empleado que derivó
+            if details.get("employee_id"):
+                emp_id = details["employee_id"]
+                if emp_id not in user_cache:
+                    user_doc = get_main_db().users.find_one({"_id": to_object_id(emp_id)})
+                    user_cache[emp_id] = serialize(user_doc) if user_doc else None
+                
+                employee = user_cache[emp_id]
+                if employee:
+                    data["details"]["employee_name"] = employee.get("full_name") or employee.get("email")
+        
         results.append(data)
+    
     if public_only:
         results = [ev for ev in results if ev.get("action") in PUBLIC_ACTIONS]
     return results
@@ -276,6 +330,7 @@ def create_claim(
     project_id: str,
     claim_type: str,
     urgency: str,
+    severity: str,
     description: str,
     created_by: str,
     sub_area: Optional[str] = None,
@@ -285,6 +340,7 @@ def create_claim(
         "project_id": to_object_id(project_id),
         "claim_type": claim_type.strip(),
         "urgency": urgency,
+        "severity": severity,
         "description": description.strip(),
         "status": "Ingresado",
         "priority": "Media",
@@ -373,11 +429,12 @@ def update_claim_with_rules(
         events.append(
             {
                 "action": "area_changed",
-                "visibility": "internal",
+                "visibility": "public",
                 "details": {
                     "from": str(current_area or ""),
                     "to": str(area_id or ""),
                     "reason": reason,
+                    "employee_id": actor_id,
                 },
             }
         )
@@ -395,11 +452,11 @@ def update_claim_with_rules(
     if not updates:
         return claim
 
-    updated = update_claim(claim_id, updates)
+    updated = update_claim(claim["id"], updates)
 
     for ev in events:
         log_claim_event(
-            claim_id=claim_id,
+            claim_id=claim["id"],
             actor_id=actor_id,
             actor_role=actor_role,
             action=ev["action"],
@@ -421,5 +478,26 @@ def add_claim_comment(*, claim_id: str, actor_id: str, actor_role: str, comment:
         action="comment",
         visibility="internal",
         details={"comment": comment},
+    )
+    return claim
+
+
+def add_claim_action(*, claim_id: str, actor_id: str, actor_role: str, action_description: str) -> Dict[str, Any]:
+    """
+    Registra una acción de trabajo realizada por un empleado sin cambiar el estado o área del reclamo.
+    Ejemplos: 'Revisé los logs del sistema', 'Apliqué el parche de seguridad', etc.
+    """
+    claim = get_claim(claim_id)
+    if not claim:
+        raise ValueError("Reclamo no encontrado")
+    if not action_description.strip():
+        raise ValueError("La descripción de la acción es obligatoria")
+    log_claim_event(
+        claim_id=claim_id,
+        actor_id=actor_id,
+        actor_role=actor_role,
+        action="action_logged",
+        visibility="internal",
+        details={"action_description": action_description.strip()},
     )
     return claim

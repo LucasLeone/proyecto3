@@ -30,10 +30,10 @@ function App() {
   }, [token, isAdmin, isEmployee])
 
   const fetchClients = useCallback(async () => {
-    if (!token || !isAdmin) return
+    if (!token || !(isAdmin || isEmployee)) return
     const data = await api.listClients(token)
     setClients(data)
-  }, [token, isAdmin])
+  }, [token, isAdmin, isEmployee])
 
   const fetchProjects = useCallback(async () => {
     if (!token) return
@@ -46,17 +46,12 @@ function App() {
     setBootstrapError(null)
 
     const bootstrap = async () => {
-      if (!(isAdmin || isEmployee)) {
-        setAreas([])
-        setClients([])
-        return
-      }
       try {
         if (isAdmin) {
           await Promise.all([fetchAreas(), fetchClients(), fetchProjects()])
         } else if (isEmployee) {
-          await Promise.all([fetchAreas(), fetchProjects()])
-        } else {
+          await Promise.all([fetchAreas(), fetchClients(), fetchProjects()])
+        } else if (isClient) {
           await fetchProjects()
         }
       } catch (err) {
@@ -65,7 +60,7 @@ function App() {
     }
 
     bootstrap()
-  }, [token, isAdmin, isEmployee, fetchAreas, fetchClients, fetchProjects])
+  }, [token, isAdmin, isEmployee, isClient, fetchAreas, fetchClients, fetchProjects])
 
   useEffect(() => {
     if (!token) {
@@ -136,12 +131,12 @@ function App() {
       ) : null}
 
       {activeTab === 'projects' ? (
-        <ProjectsPanel token={token} role={role} clients={isAdmin ? clients : []} />
+        <ProjectsPanel token={token} role={role} clients={isAdmin || isEmployee ? clients : []} currentUser={user} />
       ) : null}
       {activeTab === 'claims' && (isAdmin || isEmployee) ? (
-        <ClaimsPanel token={token} areas={areas} projects={projects} clients={clients} />
+        <ClaimsPanel token={token} areas={areas} projects={projects} clients={clients} user={user} />
       ) : null}
-      {activeTab === 'claims' && isClient ? <MyClaimsPanel token={token} projects={projects} /> : null}
+      {activeTab === 'claims' && isClient ? <MyClaimsPanel token={token} projects={projects} areas={areas} /> : null}
     </Layout>
   )
 }

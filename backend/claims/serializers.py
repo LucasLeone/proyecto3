@@ -45,7 +45,6 @@ class ProjectSerializer(serializers.Serializer):
     id = serializers.CharField(read_only=True)
     name = serializers.CharField(max_length=200)
     project_type = serializers.CharField(max_length=100)
-    status = serializers.CharField(max_length=50)
     client_id = serializers.CharField()
     is_active = serializers.BooleanField(read_only=True)
 
@@ -61,6 +60,7 @@ class ClaimSerializer(serializers.Serializer):
     project_id = serializers.CharField()
     claim_type = serializers.CharField(max_length=120)
     urgency = serializers.CharField(max_length=20)
+    severity = serializers.CharField(max_length=20, required=False, allow_null=True, allow_blank=True)
     description = serializers.CharField()
     status = serializers.CharField(read_only=True)
     priority = serializers.CharField(read_only=True)
@@ -79,6 +79,14 @@ class ClaimSerializer(serializers.Serializer):
         allowed = ["Baja", "Media", "Alta"]
         if value not in allowed:
             raise serializers.ValidationError("Urgencia inválida")
+        return value
+
+    def validate_severity(self, value: str):
+        if not value:  # Si está vacío o None, lo permitimos
+            return value
+        allowed = ["S1 - Crítico", "S2 - Alto", "S3 - Medio", "S4 - Bajo"]
+        if value not in allowed:
+            raise serializers.ValidationError("Nivel de criticidad inválido")
         return value
 
 

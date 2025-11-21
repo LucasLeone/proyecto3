@@ -14,7 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN apt-get update && apt-get install -y dos2unix && dos2unix /app/entrypoint.sh && rm -rf /var/lib/apt/lists/*
 RUN chmod +x /app/entrypoint.sh
 
-ENTRYPOINT ["./entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "/app/entrypoint.sh"]
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
