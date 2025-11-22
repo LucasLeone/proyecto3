@@ -334,6 +334,8 @@ def create_claim(
     description: str,
     created_by: str,
     sub_area: Optional[str] = None,
+    attachment_path: Optional[str] = None,
+    attachment_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     now = datetime.utcnow()
     payload = {
@@ -346,6 +348,8 @@ def create_claim(
         "priority": "Media",
         "area_id": None,
         "sub_area": sub_area.strip() if sub_area else None,
+        "attachment_path": attachment_path,
+        "attachment_name": attachment_name,
         "created_by": to_object_id(created_by),
         "created_at": now,
         "updated_at": now,

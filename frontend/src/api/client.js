@@ -1,9 +1,12 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
-async function request(path, { method = 'GET', body, token } = {}) {
-  const headers = {
-    'Content-Type': 'application/json',
+async function request(path, { method = 'GET', body, token, isFormData = false } = {}) {
+  const headers = {}
+  
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json'
   }
+  
   if (token) {
     headers.Authorization = `Bearer ${token}`
   }
@@ -11,7 +14,7 @@ async function request(path, { method = 'GET', body, token } = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: isFormData ? body : (body ? JSON.stringify(body) : undefined),
   })
 
   if (response.status === 204) {
@@ -103,8 +106,8 @@ export const api = {
     const q = params.toString() ? `?${params.toString()}` : ''
     return request(`/claims/${q}`, { token })
   },
-  createClaim(token, payload) {
-    return request('/claims/', { method: 'POST', body: payload, token })
+  createClaim(token, formData) {
+    return request('/claims/', { method: 'POST', body: formData, token, isFormData: true })
   },
   updateClaim(token, id, payload) {
     return request(`/claims/${id}/`, { method: 'PUT', body: payload, token })

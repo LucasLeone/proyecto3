@@ -9,8 +9,16 @@ export function EmployeesPanel({ token, areas }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [filterArea, setFilterArea] = useState('')
 
   const areaMap = useMemo(() => Object.fromEntries(areas.map((a) => [a.id, a.name])), [areas])
+
+  const filteredEmployees = useMemo(() => {
+    return employees.filter(emp => {
+      if (filterArea && emp.area_id !== filterArea) return false
+      return true
+    })
+  }, [employees, filterArea])
 
   const load = async () => {
     setLoading(true)
@@ -89,13 +97,27 @@ export function EmployeesPanel({ token, areas }) {
           <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Usuarios</p>
           <h2 className="text-xl font-semibold">Empleados</h2>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsModalOpen(true)}
-          className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-400"
-        >
-          + Registrar empleado
-        </button>
+        <div className="flex items-center gap-3">
+          <select
+            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+            value={filterArea}
+            onChange={(e) => setFilterArea(e.target.value)}
+          >
+            <option value="">Todas las áreas</option>
+            {areas.map((area) => (
+              <option key={area.id} value={area.id}>
+                {area.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+            className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-400"
+          >
+            + Registrar empleado
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -115,7 +137,7 @@ export function EmployeesPanel({ token, areas }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
-            {employees.map((emp) => (
+            {filteredEmployees.map((emp) => (
               <tr key={emp.id} className="hover:bg-slate-900/60">
                 <td className="px-4 py-3 text-sm">{emp.full_name || '—'}</td>
                 <td className="px-4 py-3 text-sm text-slate-200">{emp.email}</td>
@@ -140,10 +162,10 @@ export function EmployeesPanel({ token, areas }) {
                 </td>
               </tr>
             ))}
-            {employees.length === 0 ? (
+            {filteredEmployees.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-4 py-4 text-center text-sm text-slate-400">
-                  No hay empleados cargados
+                  {filterArea ? 'No hay empleados en esta área' : 'No hay empleados cargados'}
                 </td>
               </tr>
             ) : null}

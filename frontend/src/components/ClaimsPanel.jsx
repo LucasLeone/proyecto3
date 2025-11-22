@@ -281,6 +281,15 @@ export function ClaimsPanel({ token, areas, projects, clients, user }) {
                   </p>
                 </div>
 
+                {selected.description && (
+                  <div>
+                    <p className="text-slate-400">Descripción del cliente</p>
+                    <p className="text-slate-200 text-sm bg-slate-800/50 rounded-lg p-3 border border-slate-700">
+                      {selected.description}
+                    </p>
+                  </div>
+                )}
+
                 <div>
                   <p className="text-slate-400">Estado actual</p>
                   <p className="font-semibold text-slate-100">{selected.status}</p>
@@ -302,6 +311,24 @@ export function ClaimsPanel({ token, areas, projects, clients, user }) {
                   <div>
                     <p className="text-slate-400">Sub-área</p>
                     <p className="font-semibold text-slate-100">{selected.sub_area}</p>
+                  </div>
+                )}
+
+                {selected.attachment_url && (
+                  <div>
+                    <p className="text-slate-400 mb-2">Archivo adjunto</p>
+                    <a
+                      href={selected.attachment_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download
+                      className="inline-flex items-center gap-2 rounded-lg border border-emerald-700 bg-emerald-900/30 px-3 py-2 text-sm text-emerald-100 hover:bg-emerald-900/50 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span>{selected.attachment_name || 'Descargar archivo'}</span>
+                    </a>
                   </div>
                 )}
               </div>
@@ -343,7 +370,7 @@ export function ClaimsPanel({ token, areas, projects, clients, user }) {
               <h3 className="text-lg font-semibold text-slate-100">Timeline completo</h3>
               <p className="text-sm text-slate-400">Historial detallado de todas las acciones realizadas</p>
             </div>
-            <Timeline events={timeline} isPublic={false} />
+            <Timeline events={timeline.filter((ev) => ev.action !== 'comment')} isPublic={false} />
           </div>
         </div>
       )}
