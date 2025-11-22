@@ -2,6 +2,9 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.conf import settings
+import os
+from uuid import uuid4
 
 from .auth import generate_token
 from .permissions import IsAdmin, IsAdminOrEmployee, IsAuthenticated
@@ -332,6 +335,10 @@ class ClaimListCreateView(APIView):
             # Obtener el client_id del proyecto asociado
             project = get_project(claim["project_id"])
             data["client_id"] = str(project["client_id"]) if project and project.get("client_id") else str(claim["created_by"])
+            # Agregar URL del archivo adjunto si existe
+            if claim.get("attachment_path"):
+                data["attachment_url"] = request.build_absolute_uri(settings.MEDIA_URL + claim["attachment_path"])
+                data["attachment_name"] = claim.get("attachment_name", "archivo")
             if getattr(request.user, "role", None) == "client":
                 data.pop("sub_area", None)
             return data
@@ -345,6 +352,44 @@ class ClaimListCreateView(APIView):
 
         serializer = ClaimSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        
+        # Manejar archivo adjunto si existe
+        attachment_path = None
+        attachment_name = None
+        attachment_file = request.FILES.get('attachment')
+        
+        if attachment_file:
+            # Validar tipo de archivo
+            allowed_extensions = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.gif', '.txt']
+            file_ext = os.path.splitext(attachment_file.name)[1].lower()
+            if file_ext not in allowed_extensions:
+                return Response(
+                    {"detail": f"Tipo de archivo no permitido. Permitidos: {', '.join(allowed_extensions)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Validar tamaño (máximo 10MB)
+            if attachment_file.size > 10 * 1024 * 1024:
+                return Response(
+                    {"detail": "El archivo es demasiado grande. Máximo 10MB"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Generar nombre único y guardar
+            unique_filename = f"{uuid4()}{file_ext}"
+            attachment_path = os.path.join('claim_attachments', unique_filename)
+            full_path = os.path.join(settings.MEDIA_ROOT, attachment_path)
+            
+            # Crear directorio si no existe
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            
+            # Guardar archivo
+            with open(full_path, 'wb+') as destination:
+                for chunk in attachment_file.chunks():
+                    destination.write(chunk)
+            
+            attachment_name = attachment_file.name
+        
         try:
             created = create_claim(
                 project_id=serializer.validated_data["project_id"],
@@ -353,6 +398,8 @@ class ClaimListCreateView(APIView):
                 severity=serializer.validated_data.get("severity", "S3 - Medio"),
                 description=serializer.validated_data["description"],
                 created_by=request.user.id,
+                attachment_path=attachment_path,
+                attachment_name=attachment_name,
             )
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -364,6 +411,10 @@ class ClaimListCreateView(APIView):
         # Obtener el client_id del proyecto asociado
         project = get_project(created["project_id"])
         data["client_id"] = str(project["client_id"]) if project and project.get("client_id") else str(created["created_by"])
+        # Agregar URL del archivo adjunto si existe
+        if created.get("attachment_path"):
+            data["attachment_url"] = request.build_absolute_uri(settings.MEDIA_URL + created["attachment_path"])
+            data["attachment_name"] = created.get("attachment_name", "archivo")
         return Response(data, status=status.HTTP_201_CREATED)
 
 
@@ -386,6 +437,10 @@ class ClaimDetailView(APIView):
         # Obtener el client_id del proyecto asociado
         project = get_project(claim["project_id"])
         data["client_id"] = str(project["client_id"]) if project and project.get("client_id") else str(claim["created_by"])
+        # Agregar URL del archivo adjunto si existe
+        if claim.get("attachment_path"):
+            data["attachment_url"] = request.build_absolute_uri(settings.MEDIA_URL + claim["attachment_path"])
+            data["attachment_name"] = claim.get("attachment_name", "archivo")
         if role == "client":
             data.pop("sub_area", None)
         return Response(data)

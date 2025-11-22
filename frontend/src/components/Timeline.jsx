@@ -39,12 +39,6 @@ export function Timeline({ events, isPublic = false }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         )
-      case 'comment':
-        return (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-          </svg>
-        )
       case 'action_logged':
         return (
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -70,8 +64,6 @@ export function Timeline({ events, isPublic = false }) {
         return 'bg-violet-500/20 text-violet-400 border-violet-500/30'
       case 'priority_changed':
         return 'bg-amber-500/20 text-amber-400 border-amber-500/30'
-      case 'comment':
-        return 'bg-slate-500/20 text-slate-400 border-slate-500/30'
       case 'action_logged':
         return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
       default:
@@ -120,11 +112,6 @@ export function Timeline({ events, isPublic = false }) {
         return {
           title: 'Cambio de sub-área',
           description: `${ev.details?.from || '—'} → ${ev.details?.to || '—'}`,
-        }
-      case 'comment':
-        return {
-          title: 'Comentario agregado',
-          description: ev.details?.comment || '',
         }
       case 'action_logged':
         return {

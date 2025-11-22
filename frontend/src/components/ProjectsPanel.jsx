@@ -9,11 +9,19 @@ export function ProjectsPanel({ token, role, clients, currentUser }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [filterClient, setFilterClient] = useState('')
 
   const clientMap = useMemo(
     () => Object.fromEntries(clients.map((c) => [c.id, c.company_name || c.email])),
     [clients],
   )
+
+  const filteredProjects = useMemo(() => {
+    return projects.filter(project => {
+      if (filterClient && project.client_id !== filterClient) return false
+      return true
+    })
+  }, [projects, filterClient])
 
   const load = async () => {
     setLoading(true)
@@ -94,18 +102,32 @@ export function ProjectsPanel({ token, role, clients, currentUser }) {
           <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Proyectos</p>
           <h2 className="text-xl font-semibold">{admin ? 'Gestión' : 'Listado'}</h2>
         </div>
-        {admin ? (
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400 transition-colors"
+        <div className="flex items-center gap-3">
+          <select
+            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+            value={filterClient}
+            onChange={(e) => setFilterClient(e.target.value)}
           >
-            + Registrar proyecto
-          </button>
-        ) : (
-          <span className="rounded-full border border-emerald-400/50 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100">
-            Consulta
-          </span>
-        )}
+            <option value="">Todos los clientes</option>
+            {clients.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.company_name || client.email}
+              </option>
+            ))}
+          </select>
+          {admin ? (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="rounded-lg bg-violet-500 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-400 transition-colors"
+            >
+              + Registrar proyecto
+            </button>
+          ) : (
+            <span className="rounded-full border border-emerald-400/50 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100">
+              Consulta
+            </span>
+          )}
+        </div>
       </div>
 
       {error && !isModalOpen ? (
@@ -125,7 +147,7 @@ export function ProjectsPanel({ token, role, clients, currentUser }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
-            {projects.map((proj) => (
+            {filteredProjects.map((proj) => (
               <tr key={proj.id} className="hover:bg-slate-900/60">
                 <td className="px-4 py-3 text-sm">{proj.name}</td>
                 <td className="px-4 py-3 text-sm text-slate-300">{proj.project_type}</td>
@@ -156,10 +178,10 @@ export function ProjectsPanel({ token, role, clients, currentUser }) {
                 ) : null}
               </tr>
             ))}
-            {projects.length === 0 ? (
+            {filteredProjects.length === 0 ? (
               <tr>
                 <td colSpan={admin ? 4 : 3} className="px-4 py-4 text-center text-sm text-slate-400">
-                  No hay proyectos cargados
+                  {filterClient ? 'No hay proyectos para este cliente' : 'No hay proyectos cargados'}
                 </td>
               </tr>
             ) : null}

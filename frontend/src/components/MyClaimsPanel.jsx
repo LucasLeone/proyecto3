@@ -12,6 +12,7 @@ export function MyClaimsPanel({ token, projects, areas }) {
   const [timeline, setTimeline] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [form, setForm] = useState({ project_id: '', claim_type: '', urgency: 'Media', severity: 'S3 - Medio', description: '' })
+  const [attachmentFile, setAttachmentFile] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -60,8 +61,20 @@ export function MyClaimsPanel({ token, projects, areas }) {
     setLoading(true)
     setError(null)
     try {
-      await api.createClaim(token, form)
+      const formData = new FormData()
+      formData.append('project_id', form.project_id)
+      formData.append('claim_type', form.claim_type)
+      formData.append('urgency', form.urgency)
+      formData.append('severity', form.severity)
+      formData.append('description', form.description)
+      
+      if (attachmentFile) {
+        formData.append('attachment', attachmentFile)
+      }
+      
+      await api.createClaim(token, formData)
       setForm({ project_id: '', claim_type: '', urgency: 'Media', severity: 'S3 - Medio', description: '' })
+      setAttachmentFile(null)
       setIsModalOpen(false)
       load()
     } catch (err) {
@@ -74,6 +87,7 @@ export function MyClaimsPanel({ token, projects, areas }) {
   const closeModal = () => {
     setIsModalOpen(false)
     setForm({ project_id: '', claim_type: '', urgency: 'Media', severity: 'S3 - Medio', description: '' })
+    setAttachmentFile(null)
   }
 
   const filteredClaims = useMemo(() => {
@@ -265,6 +279,22 @@ export function MyClaimsPanel({ token, projects, areas }) {
                     <p className="text-slate-400">Tipo</p>
                     <p className="font-semibold text-slate-100">{selected.claim_type}</p>
                   </div>
+                  {selected.attachment_url && (
+                    <div>
+                      <p className="text-slate-400 mb-1">Archivo adjunto</p>
+                      <a
+                        href={selected.attachment_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 rounded-lg border border-sky-700 bg-sky-900/30 px-3 py-2 text-sm text-sky-100 hover:bg-sky-900/50 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span className="truncate max-w-[150px]">{selected.attachment_name || 'Descargar'}</span>
+                      </a>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -274,7 +304,7 @@ export function MyClaimsPanel({ token, projects, areas }) {
                 <h3 className="text-lg font-semibold text-slate-100">Historial del reclamo</h3>
                 <p className="text-sm text-slate-400">Seguimiento completo de tu reclamo</p>
               </div>
-              <Timeline events={timeline} isPublic={true} />
+              <Timeline events={timeline.filter((ev) => ev.action !== 'comment')} isPublic={true} />
             </div>
           </div>
         )}
@@ -368,6 +398,38 @@ export function MyClaimsPanel({ token, projects, areas }) {
                 required
               />
               <p className="mt-1 text-xs text-slate-400">Incluí pasos para reproducir el problema si aplica</p>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Archivo adjunto (opcional)
+              </label>
+              <div className="relative">
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.txt"
+                  onChange={(e) => setAttachmentFile(e.target.files[0])}
+                  className="w-full rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-300 file:mr-4 file:rounded-md file:border-0 file:bg-sky-500/20 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-sky-200 hover:file:bg-sky-500/30 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                />
+              </div>
+              {attachmentFile && (
+                <div className="mt-2 flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2">
+                  <svg className="w-4 h-4 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                  </svg>
+                  <span className="text-xs text-sky-200 flex-1">{attachmentFile.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAttachmentFile(null)}
+                    className="text-sky-400 hover:text-sky-300"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+              <p className="mt-1 text-xs text-slate-400">Formatos permitidos: PDF, DOC, DOCX, imágenes (JPG, PNG, GIF), TXT. Máximo 10MB</p>
             </div>
 
             <div className="flex gap-3 pt-2">

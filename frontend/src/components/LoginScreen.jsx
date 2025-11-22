@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import logo from '../assets/images/logo.png'
 
 export function LoginScreen({ onLogin, loading, error }) {
   const [email, setEmail] = useState('')
@@ -22,10 +23,23 @@ export function LoginScreen({ onLogin, loading, error }) {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 flex items-center justify-center px-6 py-10">
       <div className="w-full max-w-lg rounded-2xl border border-slate-800/70 bg-slate-900/70 shadow-2xl p-10">
-        <div className="mb-8 space-y-2">
-          <p className="text-xs uppercase tracking-[0.35em] text-slate-500">Sistema de reclamos</p>
-          <h1 className="text-3xl font-semibold">Acceso</h1>
-          <p className="text-slate-300 text-sm">Admin / Empleado / Cliente</p>
+        <div className="mb-8 space-y-4">
+          {/* Logo */}
+          <div className="flex justify-center">
+            <div className="w-40 h-40 overflow-hidden rounded-2xl">
+              <img src={logo} alt="Gestión de Reclamos" className="w-full h-full object-cover scale-110" />
+            </div>
+          </div>
+          
+          <div className="text-center">
+            <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-sky-400 via-blue-400 to-sky-500 bg-clip-text text-transparent mb-2">
+              Gestión de Reclamos
+            </h1>
+            <p className="text-xs uppercase tracking-[0.35em] text-slate-500 font-medium mb-3">
+              Sistema Integral
+            </p>
+            <p className="text-slate-400 text-sm">Admin / Empleado / Cliente</p>
+          </div>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <label className="block space-y-2">
