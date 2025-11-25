@@ -7,8 +7,11 @@ export function Layout({ user, role, onLogout, tabs, activeTab, onSelectTab, chi
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             {/* Logo */}
-            <div className="w-20 h-20 flex-shrink-0 overflow-hidden rounded-lg">
-              <img src={logo} alt="Gestión de Reclamos" className="w-full h-full object-cover scale-110" />
+            <div className="relative w-20 h-20 flex-shrink-0 group">
+              <div className="absolute inset-0 bg-gradient-to-br from-sky-400/10 to-blue-500/10 rounded-2xl blur-xl group-hover:blur-2xl transition-all duration-300"></div>
+              <div className="relative w-full h-full overflow-hidden rounded-2xl border-2 border-sky-500/30 bg-white shadow-2xl group-hover:border-sky-400/50 group-hover:shadow-sky-500/20 transition-all duration-300">
+                <img src={logo} alt="Gestión de Reclamos" className="w-full h-full object-contain p-1.5" />
+              </div>
             </div>
             
             {/* Título */}

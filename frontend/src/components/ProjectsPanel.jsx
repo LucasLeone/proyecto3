@@ -103,18 +103,20 @@ export function ProjectsPanel({ token, role, clients, currentUser }) {
           <h2 className="text-xl font-semibold">{admin ? 'Gestión' : 'Listado'}</h2>
         </div>
         <div className="flex items-center gap-3">
-          <select
-            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
-            value={filterClient}
-            onChange={(e) => setFilterClient(e.target.value)}
-          >
-            <option value="">Todos los clientes</option>
-            {clients.map((client) => (
-              <option key={client.id} value={client.id}>
-                {client.company_name || client.email}
-              </option>
-            ))}
-          </select>
+          {!isClient && (
+            <select
+              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+              value={filterClient}
+              onChange={(e) => setFilterClient(e.target.value)}
+            >
+              <option value="">Todos los clientes</option>
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.company_name || client.email}
+                </option>
+              ))}
+            </select>
+          )}
           {admin ? (
             <button
               onClick={() => setIsModalOpen(true)}

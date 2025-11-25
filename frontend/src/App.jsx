@@ -73,25 +73,25 @@ function App() {
     if (isAdmin) {
       return [
         { id: 'overview', label: 'Resumen' },
+        { id: 'claims', label: 'Reclamos' },
         { id: 'areas', label: 'Áreas' },
         { id: 'employees', label: 'Empleados' },
         { id: 'clients', label: 'Clientes' },
         { id: 'projects', label: 'Proyectos' },
-        { id: 'claims', label: 'Reclamos' },
       ]
     }
     if (isEmployee) {
       return [
         { id: 'overview', label: 'Resumen' },
-        { id: 'projects', label: 'Proyectos' },
         { id: 'claims', label: 'Reclamos' },
+        { id: 'projects', label: 'Proyectos' },
       ]
     }
     if (isClient) {
       return [
         { id: 'overview', label: 'Resumen' },
-        { id: 'projects', label: 'Mis Proyectos' },
         { id: 'claims', label: 'Mis Reclamos' },
+        { id: 'projects', label: 'Mis Proyectos' },
       ]
     }
     return [
