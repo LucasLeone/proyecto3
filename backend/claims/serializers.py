@@ -59,18 +59,19 @@ class ClaimSerializer(serializers.Serializer):
     id = serializers.CharField(read_only=True)
     project_id = serializers.CharField()
     claim_type = serializers.CharField(max_length=120)
-    urgency = serializers.CharField(max_length=20)
+    priority = serializers.CharField(max_length=20)
     severity = serializers.CharField(max_length=20, required=False, allow_null=True, allow_blank=True)
     description = serializers.CharField()
     attachment = serializers.FileField(required=False, allow_null=True)
     attachment_url = serializers.CharField(read_only=True, required=False)
     attachment_name = serializers.CharField(read_only=True, required=False)
     status = serializers.CharField(read_only=True)
-    priority = serializers.CharField(read_only=True)
     area_id = serializers.CharField(required=False, allow_null=True)
     sub_area = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     created_by = serializers.CharField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
+    client_rating = serializers.IntegerField(read_only=True, required=False, allow_null=True)
+    client_feedback = serializers.CharField(read_only=True, required=False, allow_null=True, allow_blank=True)
 
     def validate_project_id(self, value: Any):
         project = get_project(value)
@@ -78,10 +79,10 @@ class ClaimSerializer(serializers.Serializer):
             raise serializers.ValidationError("Proyecto no encontrado o inactivo")
         return str(project["id"])
 
-    def validate_urgency(self, value: str):
+    def validate_priority(self, value: str):
         allowed = ["Baja", "Media", "Alta"]
         if value not in allowed:
-            raise serializers.ValidationError("Urgencia inválida")
+            raise serializers.ValidationError("Prioridad inválida")
         return value
 
     def validate_severity(self, value: str):
@@ -107,4 +108,15 @@ class ClaimUpdateSerializer(serializers.Serializer):
         area = get_area(value)
         if not area or not area.get("is_active", True):
             raise serializers.ValidationError("Área no encontrada o inactiva")
+        return str(area["id"])
+
+
+class ClientFeedbackSerializer(serializers.Serializer):
+    rating = serializers.IntegerField(min_value=1, max_value=5, required=False, allow_null=True)
+    feedback = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    
+    def validate(self, data):
+        if not data.get('rating') and not data.get('feedback'):
+            raise serializers.ValidationError("Debe proporcionar al menos una calificación o un comentario")
+        return data
         return str(area["id"])

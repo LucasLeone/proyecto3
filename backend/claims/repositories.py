@@ -329,7 +329,7 @@ def create_claim(
     *,
     project_id: str,
     claim_type: str,
-    urgency: str,
+    priority: str,
     severity: str,
     description: str,
     created_by: str,
@@ -341,11 +341,10 @@ def create_claim(
     payload = {
         "project_id": to_object_id(project_id),
         "claim_type": claim_type.strip(),
-        "urgency": urgency,
+        "priority": priority,
         "severity": severity,
         "description": description.strip(),
         "status": "Ingresado",
-        "priority": "Media",
         "area_id": None,
         "sub_area": sub_area.strip() if sub_area else None,
         "attachment_path": attachment_path,
@@ -505,3 +504,75 @@ def add_claim_action(*, claim_id: str, actor_id: str, actor_role: str, action_de
         details={"action_description": action_description.strip()},
     )
     return claim
+
+
+def update_client_feedback(
+    *,
+    claim_id: str,
+    client_id: str,
+    rating: Optional[int] = None,
+    feedback: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Permite al cliente agregar su calificación y comentario sobre el reclamo.
+    Solo disponible cuando el reclamo está en 'En Proceso' o 'Resuelto'.
+    Solo se permite enviar una vez.
+    """
+    claim = get_claim(claim_id)
+    if not claim:
+        raise ValueError("Reclamo no encontrado")
+    
+    # Verificar que el cliente es el dueño del reclamo
+    if str(claim["created_by"]) != str(client_id):
+        raise ValueError("No tiene permisos para calificar este reclamo")
+    
+    # Verificar que no se haya enviado retroalimentación previamente
+    if claim.get("client_feedback") or claim.get("client_rating"):
+        raise ValueError("Ya has enviado retroalimentación para este reclamo")
+    
+    # Verificar que el estado permita feedback
+    if claim["status"] not in ["En Proceso", "Resuelto"]:
+        raise ValueError("Solo puede dar feedback cuando el reclamo está en proceso o resuelto")
+    
+    # Si hay rating, validar que esté entre 1 y 5
+    if rating is not None and (rating < 1 or rating > 5):
+        raise ValueError("La calificación debe estar entre 1 y 5")
+    
+    updates = {"updated_at": datetime.utcnow()}
+    
+    if rating is not None:
+        updates["client_rating"] = rating
+    
+    if feedback is not None:
+        updates["client_feedback"] = feedback.strip() if feedback else None
+    
+    get_main_db().claims.update_one(
+        {"_id": to_object_id(claim_id)},
+        {"$set": updates}
+    )
+    
+    # Registrar evento según lo que se actualizó
+    details = {}
+    action_type = None
+    
+    if rating is not None and feedback:
+        action_type = "client_feedback_added"
+        details = {"rating": rating, "feedback": feedback.strip()}
+    elif rating is not None:
+        action_type = "client_rating_added"
+        details = {"rating": rating}
+    elif feedback:
+        action_type = "client_comment_added"
+        details = {"comment": feedback.strip()}
+    
+    if action_type:
+        log_claim_event(
+            claim_id=claim_id,
+            actor_id=client_id,
+            actor_role="client",
+            action=action_type,
+            visibility="public",
+            details=details,
+        )
+    
+    return get_claim(claim_id)

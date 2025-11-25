@@ -45,6 +45,14 @@ export function Timeline({ events, isPublic = false }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
           </svg>
         )
+      case 'client_feedback_added':
+      case 'client_rating_added':
+      case 'client_comment_added':
+        return (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+          </svg>
+        )
       default:
         return (
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -66,6 +74,10 @@ export function Timeline({ events, isPublic = false }) {
         return 'bg-amber-500/20 text-amber-400 border-amber-500/30'
       case 'action_logged':
         return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
+      case 'client_feedback_added':
+      case 'client_rating_added':
+      case 'client_comment_added':
+        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
       default:
         return 'bg-slate-500/20 text-slate-400 border-slate-500/30'
     }
@@ -117,6 +129,23 @@ export function Timeline({ events, isPublic = false }) {
         return {
           title: 'Acción realizada',
           description: ev.details?.action_description || '',
+        }
+      case 'client_feedback_added':
+        return {
+          title: 'Retroalimentación del cliente',
+          description: ev.details?.feedback || '',
+          rating: ev.details?.rating,
+        }
+      case 'client_rating_added':
+        return {
+          title: 'Calificación del cliente',
+          description: `Calificación: ${ev.details?.rating || 0} estrellas`,
+          rating: ev.details?.rating,
+        }
+      case 'client_comment_added':
+        return {
+          title: 'Comentario del cliente',
+          description: ev.details?.comment || '',
         }
       default:
         return {
@@ -187,6 +216,22 @@ export function Timeline({ events, isPublic = false }) {
                             Motivo: {message.reason}
                           </span>
                         </p>
+                      )}
+                      
+                      {message.rating && (
+                        <div className="flex items-center gap-1 mt-2">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <svg
+                              key={star}
+                              className={`w-4 h-4 ${star <= message.rating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-600'}`}
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                            </svg>
+                          ))}
+                        </div>
                       )}
                       
                       <div className="flex items-center gap-3 text-xs text-slate-500 mt-2">

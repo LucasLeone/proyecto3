@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import { Modal } from './Modal'
 import { Timeline } from './Timeline'
+import ClientFeedbackPanel from './ClientFeedbackPanel'
 
-const urgencyOptions = ['Baja', 'Media', 'Alta']
+const priorityOptions = ['Baja', 'Media', 'Alta']
 const severityOptions = ['S1 - Crítico', 'S2 - Alto', 'S3 - Medio', 'S4 - Bajo']
 const statusOrder = ['Ingresado', 'En Proceso', 'Resuelto']
 
@@ -11,13 +12,14 @@ export function MyClaimsPanel({ token, projects, areas }) {
   const [claims, setClaims] = useState([])
   const [timeline, setTimeline] = useState([])
   const [selectedId, setSelectedId] = useState(null)
-  const [form, setForm] = useState({ project_id: '', claim_type: '', urgency: 'Media', severity: 'S3 - Medio', description: '' })
+  const [form, setForm] = useState({ project_id: '', claim_type: '', priority: 'Media', severity: 'S3 - Medio', description: '' })
   const [attachmentFile, setAttachmentFile] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [filterStatus, setFilterStatus] = useState('')
-  const [filterProject, setFilterProject] = useState('')
+  const [feedbackLoading, setFeedbackLoading] = useState(false)
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false)
 
   const projectMap = useMemo(() => Object.fromEntries(projects.map((p) => [p.id, p.name])), [projects])
   const areaMap = useMemo(() => Object.fromEntries((areas || []).map((a) => [a.id, a.name])), [areas])
@@ -64,7 +66,7 @@ export function MyClaimsPanel({ token, projects, areas }) {
       const formData = new FormData()
       formData.append('project_id', form.project_id)
       formData.append('claim_type', form.claim_type)
-      formData.append('urgency', form.urgency)
+      formData.append('priority', form.priority)
       formData.append('severity', form.severity)
       formData.append('description', form.description)
       
@@ -73,7 +75,7 @@ export function MyClaimsPanel({ token, projects, areas }) {
       }
       
       await api.createClaim(token, formData)
-      setForm({ project_id: '', claim_type: '', urgency: 'Media', severity: 'S3 - Medio', description: '' })
+      setForm({ project_id: '', claim_type: '', priority: 'Media', severity: 'S3 - Medio', description: '' })
       setAttachmentFile(null)
       setIsModalOpen(false)
       load()
@@ -86,17 +88,35 @@ export function MyClaimsPanel({ token, projects, areas }) {
 
   const closeModal = () => {
     setIsModalOpen(false)
-    setForm({ project_id: '', claim_type: '', urgency: 'Media', severity: 'S3 - Medio', description: '' })
+    setForm({ project_id: '', claim_type: '', priority: 'Media', severity: 'S3 - Medio', description: '' })
     setAttachmentFile(null)
+  }
+
+  const handleFeedbackSubmit = async ({ rating, feedback }) => {
+    setFeedbackLoading(true)
+    setError(null)
+    try {
+      if (!token) {
+        throw new Error('No hay token de autenticación disponible')
+      }
+      await api.addClientFeedback(token, selectedId, { rating, feedback })
+      // Recargar el reclamo actualizado y el timeline
+      await load()
+      await loadTimeline(selectedId)
+    } catch (err) {
+      setError(err.message)
+      throw err
+    } finally {
+      setFeedbackLoading(false)
+    }
   }
 
   const filteredClaims = useMemo(() => {
     return claims.filter(claim => {
       if (filterStatus && claim.status !== filterStatus) return false
-      if (filterProject && claim.project_id !== filterProject) return false
       return true
     })
-  }, [claims, filterStatus, filterProject])
+  }, [claims, filterStatus])
 
   const selected = useMemo(
     () => filteredClaims.find((c) => c.id === selectedId),
@@ -150,30 +170,13 @@ export function MyClaimsPanel({ token, projects, areas }) {
             ))}
           </select>
         </div>
-        <div>
-          <select
-            className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-2 text-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-            value={filterProject}
-            onChange={(e) => setFilterProject(e.target.value)}
-          >
-            <option value="">Todos los proyectos</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        {(filterStatus || filterProject) && (
+        {filterStatus && (
           <button
             type="button"
-            onClick={() => {
-              setFilterStatus('')
-              setFilterProject('')
-            }}
+            onClick={() => setFilterStatus('')}
             className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:border-slate-500"
           >
-            Limpiar filtros
+            Limpiar filtro
           </button>
         )}
       </div>
@@ -185,7 +188,7 @@ export function MyClaimsPanel({ token, projects, areas }) {
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Proyecto</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Tipo</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Urgencia</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Prioridad</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Criticidad</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Estado</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Área</th>
@@ -197,7 +200,7 @@ export function MyClaimsPanel({ token, projects, areas }) {
                 <tr key={claim.id} className="hover:bg-slate-900/60">
                   <td className="px-4 py-3 text-sm text-slate-200">{projectMap[claim.project_id] || claim.project_id}</td>
                   <td className="px-4 py-3 text-sm text-slate-200">{claim.claim_type}</td>
-                  <td className="px-4 py-3 text-sm text-slate-300">{claim.urgency}</td>
+                  <td className="px-4 py-3 text-sm text-slate-300">{claim.priority}</td>
                   <td className="px-4 py-3 text-sm text-slate-300">
                     <span className="text-xs">{claim.severity || 'N/D'}</span>
                   </td>
@@ -221,7 +224,7 @@ export function MyClaimsPanel({ token, projects, areas }) {
               {filteredClaims.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-4 text-center text-sm text-slate-400">
-                    {filterStatus || filterProject ? 'No hay reclamos que coincidan con los filtros' : 'No hay reclamos cargados'}
+                    {filterStatus ? 'No hay reclamos que coincidan con el filtro' : 'No hay reclamos cargados'}
                   </td>
                 </tr>
               ) : null}
@@ -231,75 +234,235 @@ export function MyClaimsPanel({ token, projects, areas }) {
 
         {selectedId && selected && (
           <div className="space-y-4">
-            <div className="grid md:grid-cols-3 gap-3">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3 shadow-lg">
-                <h4 className="text-sm font-semibold text-slate-100 mb-2">Estado actual</h4>
-                <div className="space-y-2">
-                  <div className="text-sm">
-                    <p className="text-slate-400">Estado</p>
-                    <div className="mt-1">{statusBadge(selected.status)}</div>
+            {/* Header con información principal */}
+            <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/90 to-slate-900/70 p-6 shadow-2xl">
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="text-2xl font-bold text-slate-100">{selected.claim_type}</h3>
+                    <span className={`rounded-full px-4 py-1.5 text-xs font-semibold border ${
+                      selected.status === 'Resuelto' 
+                        ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-300'
+                        : selected.status === 'En Proceso'
+                        ? 'border-sky-500/50 bg-sky-500/10 text-sky-300'
+                        : 'border-amber-500/50 bg-amber-500/10 text-amber-300'
+                    }`}>
+                      {selected.status}
+                    </span>
                   </div>
-                  <div className="text-sm">
-                    <p className="text-slate-400">Urgencia</p>
-                    <p className="font-semibold text-slate-100">{selected.urgency}</p>
-                  </div>
-                  <div className="text-sm">
-                    <p className="text-slate-400">Severidad</p>
-                    <p className="font-semibold text-slate-100">{selected.severity}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3 shadow-lg">
-                <h4 className="text-sm font-semibold text-slate-100 mb-2">Área asignada</h4>
-                <div className="text-sm">
-                  <p className="text-2xl font-bold text-violet-400">
-                    {selected.area_id && areaMap[selected.area_id]
-                      ? areaMap[selected.area_id]
-                      : 'Sin asignar'}
-                  </p>
-                  <p className="text-xs text-slate-500 mt-2">
-                    {selected.area_id
-                      ? 'Tu reclamo está siendo atendido por esta área'
-                      : 'Pronto se asignará tu reclamo a un área'}
+                  <p className="text-sm text-slate-400">
+                    Seguimiento de tu reclamo
                   </p>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3 shadow-lg">
-                <h4 className="text-sm font-semibold text-slate-100 mb-2">Proyecto</h4>
-                <div className="text-sm space-y-2">
-                  <div>
-                    <p className="text-slate-400">Nombre</p>
-                    <p className="font-semibold text-slate-100">
-                      {projectMap[selected.project_id] || '—'}
+              <div className="grid md:grid-cols-4 gap-4">
+                {/* Prioridad y Severidad */}
+                <div className="rounded-xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-8 h-8 rounded-lg bg-rose-500/20 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400">Prioridad</p>
+                      <p className="text-sm font-bold text-slate-100">{selected.priority}</p>
+                    </div>
+                  </div>
+                  <div className="pt-3 border-t border-slate-700/50">
+                    <p className="text-xs text-slate-400">Severidad</p>
+                    <p className="text-sm font-semibold text-rose-300">{selected.severity || 'N/D'}</p>
+                  </div>
+                </div>
+
+                {/* Proyecto */}
+                <div className="rounded-xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-slate-400">Proyecto</p>
+                      <p className="text-sm font-bold text-slate-100 truncate">{projectMap[selected.project_id] || '—'}</p>
+                    </div>
+                  </div>
+                  <div className="pt-3 border-t border-slate-700/50">
+                    <p className="text-xs text-slate-400">Tipo</p>
+                    <p className="text-sm font-semibold text-blue-300 truncate">{selected.claim_type}</p>
+                  </div>
+                </div>
+
+                {/* Área Asignada */}
+                <div className="rounded-xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-slate-400">Área asignada</p>
+                      <p className="text-sm font-bold text-slate-100 truncate">
+                        {selected.area_id && areaMap[selected.area_id]
+                          ? areaMap[selected.area_id]
+                          : 'Sin asignar'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-3 border-t border-slate-700/50">
+                    <p className="text-xs text-violet-300">
+                      {selected.area_id
+                        ? 'Área responsable'
+                        : 'Pendiente de asignación'}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-slate-400">Tipo</p>
-                    <p className="font-semibold text-slate-100">{selected.claim_type}</p>
+                </div>
+
+                {/* Estado y Archivo */}
+                <div className="rounded-xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                      <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400">Estado</p>
+                      <p className="text-sm font-bold text-slate-100">{selected.status}</p>
+                    </div>
                   </div>
                   {selected.attachment_url && (
-                    <div>
-                      <p className="text-slate-400 mb-1">Archivo adjunto</p>
+                    <div className="pt-3 border-t border-slate-700/50">
                       <a
                         href={selected.attachment_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 rounded-lg border border-sky-700 bg-sky-900/30 px-3 py-2 text-sm text-sky-100 hover:bg-sky-900/50 transition-colors"
+                        download
+                        className="inline-flex items-center gap-2 text-xs text-emerald-400 hover:text-emerald-300 transition-colors font-medium"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                        <span className="truncate max-w-[150px]">{selected.attachment_name || 'Descargar'}</span>
+                        <span className="truncate">Descargar archivo</span>
                       </a>
                     </div>
                   )}
                 </div>
               </div>
+
+              {/* Descripción */}
+              {selected.description && (
+                <div className="mt-4 rounded-xl bg-slate-800/30 border border-slate-700/50 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Tu descripción</p>
+                  </div>
+                  <p className="text-sm text-slate-200 leading-relaxed">{selected.description}</p>
+                </div>
+              )}
             </div>
 
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-lg">
+            {/* Botón y Display de Retroalimentación del Cliente */}
+            {(selected.status === 'En Proceso' || selected.status === 'Resuelto') && (
+              <div className="rounded-xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-6 shadow-xl">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-white flex items-center gap-2 mb-2">
+                      💬 Retroalimentación del Cliente
+                    </h3>
+                    
+                    {(selected.client_feedback || selected.client_rating) ? (
+                      // Mostrar retroalimentación existente
+                      <div className="space-y-3">
+                        <p className="text-sm text-slate-400">
+                          Has compartido tu opinión sobre este reclamo:
+                        </p>
+                        
+                        {selected.client_rating && (
+                          <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                            <span className="text-sm font-medium text-slate-300">Tu calificación:</span>
+                            <div className="flex gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <svg
+                                  key={star}
+                                  className={`w-5 h-5 ${star <= selected.client_rating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-600'}`}
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                >
+                                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                                </svg>
+                              ))}
+                            </div>
+                            <span className="text-sm text-yellow-400 font-semibold">
+                              {selected.client_rating === 1 && 'Muy insatisfecho'}
+                              {selected.client_rating === 2 && 'Insatisfecho'}
+                              {selected.client_rating === 3 && 'Regular'}
+                              {selected.client_rating === 4 && 'Satisfecho'}
+                              {selected.client_rating === 5 && 'Muy satisfecho'}
+                            </span>
+                          </div>
+                        )}
+                        
+                        {selected.client_feedback && (
+                          <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                              Tu comentario:
+                            </p>
+                            <p className="text-sm text-slate-200 italic leading-relaxed">
+                              "{selected.client_feedback}"
+                            </p>
+                          </div>
+                        )}
+                        
+                        <div className="flex items-center gap-2 text-xs text-emerald-400">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>Retroalimentación enviada correctamente</span>
+                        </div>
+                      </div>
+                    ) : (
+                      // Mostrar botón para enviar retroalimentación
+                      <div>
+                        <p className="text-sm text-slate-400 mb-4">
+                          {selected.status === 'Resuelto' 
+                            ? 'Comparte tu experiencia y califica cómo se resolvió tu reclamo'
+                            : 'Deja comentarios sobre el progreso de tu reclamo'}
+                        </p>
+                        <button
+                          onClick={() => setIsFeedbackModalOpen(true)}
+                          className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center gap-2"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                          </svg>
+                          <span>Enviar Retroalimentación</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal de Retroalimentación */}
+            <ClientFeedbackPanel
+              claim={selected}
+              onSubmit={handleFeedbackSubmit}
+              isLoading={feedbackLoading}
+              isOpen={isFeedbackModalOpen}
+              onClose={() => setIsFeedbackModalOpen(false)}
+            />
+
+            {/* Timeline */}
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-lg">
               <div className="mb-4">
                 <h3 className="text-lg font-semibold text-slate-100">Historial del reclamo</h3>
                 <p className="text-sm text-slate-400">Seguimiento completo de tu reclamo</p>
@@ -348,15 +511,15 @@ export function MyClaimsPanel({ token, projects, areas }) {
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-300">
-                  Urgencia
+                  Prioridad
                 </label>
                 <select
                   className="w-full rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
-                  value={form.urgency}
-                  onChange={(e) => setForm((f) => ({ ...f, urgency: e.target.value }))}
+                  value={form.priority}
+                  onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
                   required
                 >
-                  {urgencyOptions.map((u) => (
+                  {priorityOptions.map((u) => (
                     <option key={u} value={u}>
                       {u}
                     </option>

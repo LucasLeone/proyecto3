@@ -394,7 +394,7 @@ class ClaimListCreateView(APIView):
             created = create_claim(
                 project_id=serializer.validated_data["project_id"],
                 claim_type=serializer.validated_data["claim_type"],
-                urgency=serializer.validated_data["urgency"],
+                priority=serializer.validated_data["priority"],
                 severity=serializer.validated_data.get("severity", "S3 - Medio"),
                 description=serializer.validated_data["description"],
                 created_by=request.user.id,
@@ -517,6 +517,45 @@ class ClaimActionView(APIView):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
         return Response(status=status.HTTP_201_CREATED)
+
+
+class ClientFeedbackView(APIView):
+    """
+    Permite al cliente enviar feedback (comentario y/o calificación) sobre el reclamo.
+    Solo disponible cuando el reclamo está en 'En Proceso' o 'Resuelto'.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, claim_id: str):
+        from .repositories import update_client_feedback
+        from .serializers import ClientFeedbackSerializer
+
+        # Verificar que el usuario es un cliente
+        if getattr(request.user, "role", None) != "client":
+            return Response(
+                {"detail": "Solo los clientes pueden enviar feedback"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = ClientFeedbackSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            updated_claim = update_client_feedback(
+                claim_id=claim_id,
+                client_id=request.user.id,
+                rating=serializer.validated_data.get("rating"),
+                feedback=serializer.validated_data.get("feedback"),
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = ClaimSerializer(updated_claim).data
+        data["project_id"] = str(updated_claim["project_id"])
+        data["area_id"] = str(updated_claim["area_id"]) if updated_claim.get("area_id") else None
+        data["created_by"] = str(updated_claim["created_by"])
+        return Response(data)
 
 
 class ClaimTimelineView(APIView):

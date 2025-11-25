@@ -11,6 +11,13 @@ async function request(path, { method = 'GET', body, token, isFormData = false }
     headers.Authorization = `Bearer ${token}`
   }
 
+  console.log('Making request:', { 
+    url: `${API_BASE}${path}`, 
+    method, 
+    hasToken: !!token,
+    headers 
+  })
+
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
@@ -121,5 +128,13 @@ export const api = {
   },
   addAction(token, id, action_description) {
     return request(`/claims/${id}/actions/`, { method: 'POST', body: { action_description }, token })
+  },
+  addClientFeedback(token, id, { rating, feedback }) {
+    console.log('addClientFeedback called with:', { token: token ? 'exists' : 'missing', id, rating, feedback })
+    return request(`/claims/${id}/feedback/`, { 
+      method: 'POST', 
+      body: { rating, feedback }, 
+      token 
+    })
   },
 }
