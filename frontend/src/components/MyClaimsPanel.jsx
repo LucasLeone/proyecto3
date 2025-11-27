@@ -295,7 +295,7 @@ export function MyClaimsPanel({ token, projects, areas }) {
               </div>
 
               <div className="grid md:grid-cols-4 gap-4">
-                {/* Prioridad y Severidad */}
+                {/* Prioridad y Criticidad */}
                 <div className="rounded-xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <div className="w-8 h-8 rounded-lg bg-rose-500/20 flex items-center justify-center">
@@ -309,7 +309,7 @@ export function MyClaimsPanel({ token, projects, areas }) {
                     </div>
                   </div>
                   <div className="pt-3 border-t border-slate-700/50">
-                    <p className="text-xs text-slate-400">Severidad</p>
+                    <p className="text-xs text-slate-400">Criticidad</p>
                     <p className="text-sm font-semibold text-rose-300">{selected.severity || 'N/D'}</p>
                   </div>
                 </div>

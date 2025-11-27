@@ -48,6 +48,10 @@ export const api = {
     return request('/auth/login/', { method: 'POST', body: { email, password } })
   },
 
+  async get(path, token) {
+    return request(path, { token })
+  },
+
   // Areas
   listAreas(token) {
     return request('/areas/', { token })
@@ -152,3 +156,5 @@ export const api = {
     })
   },
 }
+
+export default api
