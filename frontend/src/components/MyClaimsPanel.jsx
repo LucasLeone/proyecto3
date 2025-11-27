@@ -3,6 +3,7 @@ import { api } from '../api/client'
 import { Modal } from './Modal'
 import { Timeline } from './Timeline'
 import ClientFeedbackPanel from './ClientFeedbackPanel'
+import { ClientFeedbackMessagesModal } from './ClientFeedbackMessagesModal'
 
 const priorityOptions = ['Baja', 'Media', 'Alta']
 const severityOptions = ['S1 - Crítico', 'S2 - Alto', 'S3 - Medio', 'S4 - Bajo']
@@ -20,6 +21,10 @@ export function MyClaimsPanel({ token, projects, areas }) {
   const [filterStatus, setFilterStatus] = useState('')
   const [feedbackLoading, setFeedbackLoading] = useState(false)
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false)
+  const [isClientFeedbackModalOpen, setIsClientFeedbackModalOpen] = useState(false)
+  const [clientFeedbackMessages, setClientFeedbackMessages] = useState([])
+  const [clientFeedbackLoading, setClientFeedbackLoading] = useState(false)
+  const [clientFeedbackError, setClientFeedbackError] = useState(null)
 
   const projectMap = useMemo(() => Object.fromEntries(projects.map((p) => [p.id, p.name])), [projects])
   const areaMap = useMemo(() => Object.fromEntries((areas || []).map((a) => [a.id, a.name])), [areas])
@@ -44,7 +49,14 @@ export function MyClaimsPanel({ token, projects, areas }) {
   const loadTimeline = async (id) => {
     try {
       const events = await api.claimTimeline(token, id, { publicOnly: true })
-      setTimeline(events.filter((ev) => ev.visibility === 'public'))
+      // Filtrar eventos de feedback del cliente
+      const filteredEvents = events.filter((ev) => 
+        ev.visibility === 'public' && 
+        ev.action !== 'client_comment_added' && 
+        ev.action !== 'client_feedback_added' && 
+        ev.action !== 'client_rating_added'
+      )
+      setTimeline(filteredEvents)
     } catch (err) {
       setTimeline([])
     }
@@ -57,6 +69,28 @@ export function MyClaimsPanel({ token, projects, areas }) {
   useEffect(() => {
     if (selectedId) loadTimeline(selectedId)
   }, [selectedId])
+
+  const loadClientFeedbackMessages = async (id) => {
+    if (!id) return
+    setClientFeedbackLoading(true)
+    setClientFeedbackError(null)
+    setClientFeedbackMessages([])
+    try {
+      const data = await api.getClientFeedbackMessages(token, id)
+      setClientFeedbackMessages(data)
+    } catch (err) {
+      setClientFeedbackMessages([])
+      setClientFeedbackError(err.message)
+    } finally {
+      setClientFeedbackLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (isClientFeedbackModalOpen && selectedId) {
+      loadClientFeedbackMessages(selectedId)
+    }
+  }, [isClientFeedbackModalOpen, selectedId])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -100,9 +134,11 @@ export function MyClaimsPanel({ token, projects, areas }) {
         throw new Error('No hay token de autenticación disponible')
       }
       await api.addClientFeedback(token, selectedId, { rating, feedback })
-      // Recargar el reclamo actualizado y el timeline
+      // Recargar el reclamo actualizado, timeline y cerrar modal
       await load()
       await loadTimeline(selectedId)
+      // Mensaje de éxito
+      setError(null)
     } catch (err) {
       setError(err.message)
       throw err
@@ -205,7 +241,9 @@ export function MyClaimsPanel({ token, projects, areas }) {
                     <span className="text-xs">{claim.severity || 'N/D'}</span>
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-300">{statusBadge(claim.status)}</td>
-                  <td className="px-4 py-3 text-sm text-slate-300">{claim.area_id || 'No asignada'}</td>
+                  <td className="px-4 py-3 text-sm text-slate-300">
+                    {claim.area_id && areaMap[claim.area_id] ? areaMap[claim.area_id] : '-'}
+                  </td>
                   <td className="px-4 py-3 text-sm">
                     <button
                       type="button"
@@ -295,31 +333,33 @@ export function MyClaimsPanel({ token, projects, areas }) {
                   </div>
                 </div>
 
-                {/* Área Asignada */}
-                <div className="rounded-xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center">
-                      <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
+                {/* Área Asignada - Solo mostrar si NO está resuelto */}
+                {selected.status !== 'Resuelto' && (
+                  <div className="rounded-xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                        <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-slate-400">Área asignada</p>
+                        <p className="text-sm font-bold text-slate-100 truncate">
+                          {selected.area_id && areaMap[selected.area_id]
+                            ? areaMap[selected.area_id]
+                            : '-'}
+                        </p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-slate-400">Área asignada</p>
-                      <p className="text-sm font-bold text-slate-100 truncate">
-                        {selected.area_id && areaMap[selected.area_id]
-                          ? areaMap[selected.area_id]
-                          : 'Sin asignar'}
+                    <div className="pt-3 border-t border-slate-700/50">
+                      <p className="text-xs text-violet-300">
+                        {selected.area_id
+                          ? 'Área responsable'
+                          : 'Pendiente de asignación'}
                       </p>
                     </div>
                   </div>
-                  <div className="pt-3 border-t border-slate-700/50">
-                    <p className="text-xs text-violet-300">
-                      {selected.area_id
-                        ? 'Área responsable'
-                        : 'Pendiente de asignación'}
-                    </p>
-                  </div>
-                </div>
+                )}
 
                 {/* Estado y Archivo */}
                 <div className="rounded-xl bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 p-4">
@@ -365,6 +405,19 @@ export function MyClaimsPanel({ token, projects, areas }) {
                   <p className="text-sm text-slate-200 leading-relaxed">{selected.description}</p>
                 </div>
               )}
+
+              {/* Resolución - Solo visible cuando el reclamo está resuelto */}
+              {selected.status === 'Resuelto' && selected.resolution_description && (
+                <div className="mt-4 rounded-xl bg-emerald-900/20 border border-emerald-700/50 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-sm font-semibold uppercase tracking-wider text-emerald-300">Resolución</p>
+                  </div>
+                  <p className="text-sm text-emerald-100 leading-relaxed">{selected.resolution_description}</p>
+                </div>
+              )}
             </div>
 
             {/* Botón y Display de Retroalimentación del Cliente */}
@@ -376,7 +429,8 @@ export function MyClaimsPanel({ token, projects, areas }) {
                       💬 Retroalimentación del Cliente
                     </h3>
                     
-                    {(selected.client_feedback || selected.client_rating) ? (
+                    {/* Solo mostrar "ya enviado" si está resuelto Y tiene feedback */}
+                    {(selected.status === 'Resuelto' && (selected.client_feedback || selected.client_rating)) ? (
                       // Mostrar retroalimentación existente
                       <div className="space-y-3">
                         <p className="text-sm text-slate-400">
@@ -430,21 +484,32 @@ export function MyClaimsPanel({ token, projects, areas }) {
                       </div>
                     ) : (
                       // Mostrar botón para enviar retroalimentación
-                      <div>
+                      <div className="space-y-3">
                         <p className="text-sm text-slate-400 mb-4">
                           {selected.status === 'Resuelto' 
                             ? 'Comparte tu experiencia y califica cómo se resolvió tu reclamo'
                             : 'Deja comentarios sobre el progreso de tu reclamo'}
                         </p>
-                        <button
-                          onClick={() => setIsFeedbackModalOpen(true)}
-                          className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center gap-2"
-                        >
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                          </svg>
-                          <span>Enviar Retroalimentación</span>
-                        </button>
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => setIsFeedbackModalOpen(true)}
+                            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center gap-2"
+                          >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                            </svg>
+                            <span>Enviar Retroalimentación</span>
+                          </button>
+                          <button
+                            onClick={() => setIsClientFeedbackModalOpen(true)}
+                            className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-medium rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center gap-2"
+                          >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            <span>Ver Mis Mensajes</span>
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -614,6 +679,19 @@ export function MyClaimsPanel({ token, projects, areas }) {
           </form>
         </Modal>
       ) : null}
+
+      {/* Modal de Mensajes del Cliente */}
+      <ClientFeedbackMessagesModal
+        isOpen={isClientFeedbackModalOpen}
+        onClose={() => {
+          setIsClientFeedbackModalOpen(false)
+          setClientFeedbackMessages([])
+          setClientFeedbackError(null)
+        }}
+        messages={clientFeedbackMessages}
+        loading={clientFeedbackLoading}
+        error={clientFeedbackError}
+      />
     </div>
   )
 }

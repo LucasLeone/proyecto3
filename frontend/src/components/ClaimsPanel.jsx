@@ -4,6 +4,7 @@ import { Timeline } from './Timeline'
 import { Modal } from './Modal'
 import { ChatModal } from './ChatModal'
 import { ManageClaimModal } from './ManageClaimModal'
+import { ClientFeedbackMessagesModal } from './ClientFeedbackMessagesModal'
 
 const statusOptions = ['Ingresado', 'En Proceso', 'Resuelto']
 const priorityOptions = ['Baja', 'Media', 'Alta']
@@ -23,6 +24,10 @@ export function ClaimsPanel({ token, areas, projects, clients, user }) {
   const [actionDescription, setActionDescription] = useState('')
   const [isChatModalOpen, setIsChatModalOpen] = useState(false)
   const [isManageModalOpen, setIsManageModalOpen] = useState(false)
+  const [isClientFeedbackModalOpen, setIsClientFeedbackModalOpen] = useState(false)
+  const [clientFeedbackMessages, setClientFeedbackMessages] = useState([])
+  const [clientFeedbackLoading, setClientFeedbackLoading] = useState(false)
+  const [clientFeedbackError, setClientFeedbackError] = useState(null)
 
   const projectMap = useMemo(
     () => Object.fromEntries(projects.map((p) => [p.id, p.name])),
@@ -66,9 +71,31 @@ export function ClaimsPanel({ token, areas, projects, clients, user }) {
   const loadTimeline = async (id) => {
     try {
       const events = await api.claimTimeline(token, id)
-      setTimeline(events)
+      // Filtrar eventos de feedback del cliente
+      const filteredEvents = events.filter((ev) => 
+        ev.action !== 'client_comment_added' && 
+        ev.action !== 'client_feedback_added' && 
+        ev.action !== 'client_rating_added'
+      )
+      setTimeline(filteredEvents)
     } catch (err) {
       setTimeline([])
+    }
+  }
+
+  const loadClientFeedbackMessages = async (id) => {
+    if (!id) return
+    setClientFeedbackLoading(true)
+    setClientFeedbackError(null)
+    setClientFeedbackMessages([])
+    try {
+      const data = await api.getClientFeedbackMessages(token, id)
+      setClientFeedbackMessages(data)
+    } catch (err) {
+      setClientFeedbackMessages([])
+      setClientFeedbackError(err.message)
+    } finally {
+      setClientFeedbackLoading(false)
     }
   }
 
@@ -81,6 +108,12 @@ export function ClaimsPanel({ token, areas, projects, clients, user }) {
       loadTimeline(selectedId)
     }
   }, [selectedId])
+
+  useEffect(() => {
+    if (isClientFeedbackModalOpen && selectedId) {
+      loadClientFeedbackMessages(selectedId)
+    }
+  }, [isClientFeedbackModalOpen, selectedId])
 
   const updateClaim = async (id, payload) => {
     setLoading(true)
@@ -128,6 +161,11 @@ export function ClaimsPanel({ token, areas, projects, clients, user }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  const openClientFeedbackModal = () => {
+    if (!selectedId) return
+    setIsClientFeedbackModalOpen(true)
   }
 
   return (
@@ -298,6 +336,18 @@ export function ClaimsPanel({ token, areas, projects, clients, user }) {
                 </button>
                 <button
                   type="button"
+                  onClick={openClientFeedbackModal}
+                  disabled={loading}
+                  className="rounded-xl border border-emerald-600/50 bg-gradient-to-br from-emerald-900/40 to-emerald-900/20 px-4 py-2.5 text-sm font-medium text-emerald-100 hover:from-emerald-900/60 hover:to-emerald-900/40 hover:border-emerald-500/70 disabled:opacity-50 transition-all shadow-lg hover:shadow-emerald-900/30 flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 20h9" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 12h14M5 16h6" />
+                  </svg>
+                  Mensajes del Cliente
+                </button>
+                <button
+                  type="button"
                   onClick={() => setIsManageModalOpen(true)}
                   disabled={loading}
                   className="rounded-xl border border-violet-600/50 bg-gradient-to-br from-violet-900/40 to-violet-900/20 px-4 py-2.5 text-sm font-medium text-violet-100 hover:from-violet-900/60 hover:to-violet-900/40 hover:border-violet-500/70 disabled:opacity-50 transition-all shadow-lg hover:shadow-violet-900/30 flex items-center gap-2"
@@ -417,6 +467,19 @@ export function ClaimsPanel({ token, areas, projects, clients, user }) {
                 <p className="text-sm text-slate-200 leading-relaxed">{selected.description}</p>
               </div>
             )}
+
+            {/* Resolución - Solo visible cuando el reclamo está resuelto */}
+            {selected.status === 'Resuelto' && selected.resolution_description && (
+              <div className="mt-4 rounded-xl bg-emerald-900/20 border border-emerald-700/50 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-sm font-semibold uppercase tracking-wider text-emerald-300">Resolución</p>
+                </div>
+                <p className="text-sm text-emerald-100 leading-relaxed">{selected.resolution_description}</p>
+              </div>
+            )}
           </div>
 
           {/* Timeline completo */}
@@ -455,6 +518,18 @@ export function ClaimsPanel({ token, areas, projects, clients, user }) {
         setActionDescription={setActionDescription}
         onSubmitAction={submitAction}
         loading={loading}
+      />
+
+      <ClientFeedbackMessagesModal
+        isOpen={isClientFeedbackModalOpen}
+        onClose={() => {
+          setIsClientFeedbackModalOpen(false)
+          setClientFeedbackMessages([])
+          setClientFeedbackError(null)
+        }}
+        messages={clientFeedbackMessages}
+        loading={clientFeedbackLoading}
+        error={clientFeedbackError}
       />
     </div>
   )

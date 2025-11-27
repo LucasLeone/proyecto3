@@ -1,6 +1,8 @@
 from django.core.management.base import BaseCommand
 from datetime import datetime, timedelta
 import random
+import os
+from dotenv import load_dotenv
 
 from claims.repositories import (
     create_area,
@@ -16,6 +18,9 @@ from claims.repositories import (
     get_user_by_id,
     get_area,
 )
+
+# Cargar variables de entorno
+load_dotenv()
 
 
 class Command(BaseCommand):
@@ -78,22 +83,23 @@ class Command(BaseCommand):
 
             # 2. Crear 3 empleados (uno por área)
             self.stdout.write("\n👥 Creando empleados...")
+            employee_password = os.getenv("EMPLOYEE_PASSWORD", "empleado123")
             employees_data = [
                 {
                     "email": "juan.perez@empresa.com",
-                    "password": "empleado123",
+                    "password": employee_password,
                     "full_name": "Juan Pérez",
                     "area_id": areas[0]["id"]
                 },
                 {
                     "email": "maria.gonzalez@empresa.com",
-                    "password": "empleado123",
+                    "password": employee_password,
                     "full_name": "María González",
                     "area_id": areas[1]["id"]
                 },
                 {
                     "email": "carlos.rodriguez@empresa.com",
-                    "password": "empleado123",
+                    "password": employee_password,
                     "full_name": "Carlos Rodríguez",
                     "area_id": areas[2]["id"]
                 }
@@ -121,22 +127,23 @@ class Command(BaseCommand):
 
             # 3. Crear 3 clientes
             self.stdout.write("\n🏢 Creando clientes...")
+            client_password = os.getenv("CLIENT_PASSWORD", "cliente123")
             clients_data = [
                 {
                     "email": "contacto@tecnosolutions.com",
-                    "password": "cliente123",
+                    "password": client_password,
                     "full_name": "Roberto Martínez",
                     "company_name": "TecnoSolutions SA"
                 },
                 {
                     "email": "admin@innovatech.com",
-                    "password": "cliente123",
+                    "password": client_password,
                     "full_name": "Laura Fernández",
                     "company_name": "InnovaTech Corp"
                 },
                 {
                     "email": "soporte@digitalplus.com",
-                    "password": "cliente123",
+                    "password": client_password,
                     "full_name": "Diego Sánchez",
                     "company_name": "Digital Plus SRL"
                 }

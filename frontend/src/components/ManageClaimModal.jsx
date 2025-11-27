@@ -15,17 +15,17 @@ export function ManageClaimModal({
   loading,
 }) {
   const [localStatus, setLocalStatus] = useState('')
-  const [localPriority, setLocalPriority] = useState('')
   const [localAreaId, setLocalAreaId] = useState('')
   const [reason, setReason] = useState('')
   const [subArea, setSubArea] = useState('')
+  const [resolutionDescription, setResolutionDescription] = useState('')
 
   useEffect(() => {
     if (claim) {
       setLocalStatus(claim.status)
-      setLocalPriority(claim.priority || 'Media')
       setLocalAreaId(claim.area_id || '')
       setSubArea(claim.sub_area || '')
+      setResolutionDescription('')
       setReason('')
     }
   }, [claim])
@@ -37,10 +37,10 @@ export function ManageClaimModal({
   const hasChanges = () => {
     return (
       localStatus !== claim.status ||
-      localPriority !== (claim.priority || 'Media') ||
       localAreaId !== (claim.area_id || '') ||
       subArea !== (claim.sub_area || '') ||
-      actionDescription.trim() !== ''
+      actionDescription.trim() !== '' ||
+      resolutionDescription.trim() !== ''
     )
   }
 
@@ -55,14 +55,20 @@ export function ManageClaimModal({
       return
     }
 
+    // Validar descripción de resolución si cambia a Resuelto
+    if (localStatus !== claim.status && localStatus === 'Resuelto') {
+      if (!resolutionDescription.trim()) {
+        alert('Debes proporcionar una descripción detallada de la resolución')
+        return
+      }
+    }
+
     // Estado
     if (localStatus !== claim.status) {
       updates.status = localStatus
-    }
-
-    // Prioridad
-    if (localPriority !== (claim.priority || 'Media')) {
-      updates.priority = localPriority
+      if (localStatus === 'Resuelto') {
+        updates.resolution_description = resolutionDescription.trim()
+      }
     }
 
     // Área
@@ -93,40 +99,43 @@ export function ManageClaimModal({
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Gestionar Reclamo">
       <div className="space-y-4 max-h-[70vh] overflow-y-auto px-1">
-        {/* Primera fila: Estado y Prioridad */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="grid gap-2">
-            <label className="text-sm font-medium text-slate-200">Estado</label>
-            <select
-              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none disabled:opacity-50"
-              value={localStatus}
-              onChange={(e) => setLocalStatus(e.target.value)}
-              disabled={isResolved || loading}
-            >
-              {statusOptions.map((st) => (
-                <option key={st} value={st}>
-                  {st}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid gap-2">
-            <label className="text-sm font-medium text-slate-200">Prioridad</label>
-            <select
-              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none disabled:opacity-50"
-              value={localPriority}
-              onChange={(e) => setLocalPriority(e.target.value)}
-              disabled={isResolved || loading}
-            >
-              {priorityOptions.map((pr) => (
-                <option key={pr} value={pr}>
-                  {pr}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Estado */}
+        <div className="grid gap-2">
+          <label className="text-sm font-medium text-slate-200">Estado</label>
+          <select
+            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none disabled:opacity-50"
+            value={localStatus}
+            onChange={(e) => setLocalStatus(e.target.value)}
+            disabled={isResolved || loading}
+          >
+            {statusOptions.map((st) => (
+              <option key={st} value={st}>
+                {st}
+              </option>
+            ))}
+          </select>
         </div>
+
+        {/* Descripción de resolución - solo visible cuando se cambia a Resuelto */}
+        {localStatus === 'Resuelto' && claim.status !== 'Resuelto' && (
+          <div className="grid gap-2 p-4 bg-emerald-900/20 border border-emerald-700/50 rounded-lg">
+            <label className="text-sm font-medium text-emerald-200 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Descripción de Resolución <span className="text-red-400">*</span>
+            </label>
+            <textarea
+              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none resize-none"
+              placeholder="Describe detalladamente cómo se resolvió el reclamo. Esta información será visible para el cliente."
+              rows={4}
+              value={resolutionDescription}
+              onChange={(e) => setResolutionDescription(e.target.value)}
+              disabled={loading}
+            />
+            <p className="text-xs text-emerald-300/70">Esta descripción se mostrará al cliente para que sepa cómo se resolvió su reclamo.</p>
+          </div>
+        )}
 
         {/* Segunda fila: Área y Sub-área */}
         <div className="grid grid-cols-2 gap-4">
@@ -160,13 +169,22 @@ export function ManageClaimModal({
             <label className="text-sm font-medium text-slate-200">
               Sub-área <span className="text-xs text-slate-400">(no visible al cliente)</span>
             </label>
-            <input
-              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-none disabled:opacity-50"
-              placeholder="Ej: Infraestructura, Base de datos..."
+            <select
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none disabled:opacity-50"
               value={subArea}
               onChange={(e) => setSubArea(e.target.value)}
-              disabled={isResolved || loading}
-            />
+              disabled={isResolved || loading || !localAreaId}
+            >
+              <option value="">Sin sub-área</option>
+              {localAreaId && areas.find(a => a.id === localAreaId)?.sub_areas?.map((sa) => (
+                <option key={sa.id} value={sa.name}>
+                  {sa.name}
+                </option>
+              ))}
+            </select>
+            {!localAreaId && (
+              <p className="text-xs text-slate-400">Primero selecciona un área</p>
+            )}
           </div>
         </div>
 
