@@ -14,6 +14,7 @@ class AreaSerializer(serializers.Serializer):
     id = serializers.CharField(read_only=True)
     name = serializers.CharField(max_length=120)
     description = serializers.CharField(max_length=500, allow_blank=True, required=False)
+    sub_areas = serializers.ListField(read_only=True, required=False)
     is_active = serializers.BooleanField(read_only=True)
 
 
@@ -72,6 +73,7 @@ class ClaimSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField(read_only=True)
     client_rating = serializers.IntegerField(read_only=True, required=False, allow_null=True)
     client_feedback = serializers.CharField(read_only=True, required=False, allow_null=True, allow_blank=True)
+    resolution_description = serializers.CharField(read_only=True, required=False, allow_null=True, allow_blank=True)
 
     def validate_project_id(self, value: Any):
         project = get_project(value)
@@ -101,6 +103,7 @@ class ClaimUpdateSerializer(serializers.Serializer):
     sub_area = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     reason = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     description = serializers.CharField(required=False, allow_blank=True)
+    resolution_description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     def validate_area_id(self, value: Any):
         if not value:
@@ -119,4 +122,14 @@ class ClientFeedbackSerializer(serializers.Serializer):
         if not data.get('rating') and not data.get('feedback'):
             raise serializers.ValidationError("Debe proporcionar al menos una calificación o un comentario")
         return data
-        return str(area["id"])
+
+
+class ClientFeedbackMessageSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    claim_id = serializers.CharField(read_only=True)
+    client_id = serializers.CharField(read_only=True)
+    client_name = serializers.CharField(read_only=True, required=False, allow_blank=True, allow_null=True)
+    message = serializers.CharField(read_only=True, required=False, allow_blank=True, allow_null=True)
+    rating = serializers.IntegerField(read_only=True, required=False, allow_null=True)
+    type = serializers.ChoiceField(choices=[("progress", "progress"), ("final", "final")], read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)

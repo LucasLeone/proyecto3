@@ -124,6 +124,10 @@ export function Timeline({ events, isPublic = false }) {
         return {
           title: 'Cambio de sub-área',
           description: `${ev.details?.from || '—'} → ${ev.details?.to || '—'}`,
+          extra: ev.details?.employee_name
+            ? `Cambiado por: ${ev.details.employee_name}`
+            : null,
+          reason: ev.details?.reason,
         }
       case 'action_logged':
         return {

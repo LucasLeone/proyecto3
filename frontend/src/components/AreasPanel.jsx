@@ -9,6 +9,10 @@ export function AreasPanel({ token, readOnly = false, onChange }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isSubAreasModalOpen, setIsSubAreasModalOpen] = useState(false)
+  const [selectedArea, setSelectedArea] = useState(null)
+  const [subAreaForm, setSubAreaForm] = useState('')
+  const [editingSubAreaId, setEditingSubAreaId] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -76,6 +80,72 @@ export function AreasPanel({ token, readOnly = false, onChange }) {
     }
   }
 
+  const openSubAreasModal = (area) => {
+    setSelectedArea(area)
+    setIsSubAreasModalOpen(true)
+    setSubAreaForm('')
+    setEditingSubAreaId(null)
+  }
+
+  const closeSubAreasModal = () => {
+    setIsSubAreasModalOpen(false)
+    setSelectedArea(null)
+    setSubAreaForm('')
+    setEditingSubAreaId(null)
+  }
+
+  const handleSubAreaSubmit = async (e) => {
+    e.preventDefault()
+    if (readOnly || !selectedArea) return
+    setLoading(true)
+    setError(null)
+    try {
+      if (editingSubAreaId) {
+        await api.updateSubArea(token, selectedArea.id, editingSubAreaId, subAreaForm)
+      } else {
+        await api.addSubArea(token, selectedArea.id, subAreaForm)
+      }
+      setSubAreaForm('')
+      setEditingSubAreaId(null)
+      await load()
+      // Actualizar el área seleccionada
+      const updatedArea = areas.find(a => a.id === selectedArea.id)
+      if (updatedArea) setSelectedArea(updatedArea)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const startEditSubArea = (subArea) => {
+    setEditingSubAreaId(subArea.id)
+    setSubAreaForm(subArea.name)
+  }
+
+  const cancelEditSubArea = () => {
+    setEditingSubAreaId(null)
+    setSubAreaForm('')
+  }
+
+  const handleDeleteSubArea = async (subAreaId) => {
+    if (readOnly || !selectedArea) return
+    setLoading(true)
+    setError(null)
+    try {
+      await api.deleteSubArea(token, selectedArea.id, subAreaId)
+      await load()
+      // Actualizar el área seleccionada
+      const updatedArea = areas.find(a => a.id === selectedArea.id)
+      if (updatedArea) setSelectedArea(updatedArea)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -110,6 +180,7 @@ export function AreasPanel({ token, readOnly = false, onChange }) {
             <tr>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Nombre</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Descripción</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Sub-áreas</th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-slate-300">Acciones</th>
             </tr>
           </thead>
@@ -118,6 +189,20 @@ export function AreasPanel({ token, readOnly = false, onChange }) {
               <tr key={area.id} className="hover:bg-slate-900/60">
                 <td className="px-4 py-3 text-sm">{area.name}</td>
                 <td className="px-4 py-3 text-sm text-slate-300">{area.description || '—'}</td>
+                <td className="px-4 py-3 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-400">{area.sub_areas?.length || 0}</span>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => openSubAreasModal(area)}
+                        className="text-xs text-sky-400 hover:text-sky-300 underline"
+                      >
+                        Gestionar
+                      </button>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-sm">
                   {readOnly ? (
                     <span className="text-slate-500">Solo lectura</span>
@@ -144,7 +229,7 @@ export function AreasPanel({ token, readOnly = false, onChange }) {
             ))}
             {areas.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-4 py-4 text-center text-sm text-slate-400">
+                <td colSpan={4} className="px-4 py-4 text-center text-sm text-slate-400">
                   No hay áreas cargadas
                 </td>
               </tr>
@@ -198,6 +283,89 @@ export function AreasPanel({ token, readOnly = false, onChange }) {
               </button>
             </div>
           </form>
+        </Modal>
+      ) : null}
+
+      {/* Modal de Sub-áreas */}
+      {isSubAreasModalOpen && selectedArea ? (
+        <Modal isOpen={isSubAreasModalOpen} onClose={closeSubAreasModal} title={`Sub-áreas de ${selectedArea.name}`}>
+          <div className="space-y-4">
+            {/* Formulario para agregar/editar sub-área */}
+            <form onSubmit={handleSubAreaSubmit} className="flex gap-2">
+              <input
+                className="flex-1 rounded-lg border border-slate-800 bg-slate-900 px-4 py-2 text-sm focus:border-sky-400 focus:outline-none"
+                placeholder="Nombre de la sub-área"
+                value={subAreaForm}
+                onChange={(e) => setSubAreaForm(e.target.value)}
+                required
+              />
+              {editingSubAreaId && (
+                <button
+                  type="button"
+                  onClick={cancelEditSubArea}
+                  className="rounded-lg border border-slate-700 px-4 py-2 text-sm hover:border-slate-500"
+                >
+                  Cancelar
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={loading}
+                className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-sky-400 disabled:opacity-60"
+              >
+                {editingSubAreaId ? 'Actualizar' : 'Agregar'}
+              </button>
+            </form>
+
+            {/* Lista de sub-áreas */}
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Sub-áreas registradas ({selectedArea.sub_areas?.length || 0})
+              </p>
+              {selectedArea.sub_areas && selectedArea.sub_areas.length > 0 ? (
+                <div className="space-y-2">
+                  {selectedArea.sub_areas.map((subArea) => (
+                    <div
+                      key={subArea.id}
+                      className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/50 px-4 py-3"
+                    >
+                      <span className="text-sm text-slate-200">{subArea.name}</span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startEditSubArea(subArea)}
+                          className="rounded-md border border-slate-700 px-3 py-1 text-xs hover:border-slate-500"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSubArea(subArea.id)}
+                          className="rounded-md border border-red-500/40 px-3 py-1 text-xs text-red-200 hover:border-red-400"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400 text-center py-4">
+                  No hay sub-áreas registradas
+                </p>
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-slate-700">
+              <button
+                type="button"
+                onClick={closeSubAreasModal}
+                className="w-full rounded-lg border border-slate-700 px-4 py-3 text-sm text-slate-200 hover:border-slate-500"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
         </Modal>
       ) : null}
     </div>

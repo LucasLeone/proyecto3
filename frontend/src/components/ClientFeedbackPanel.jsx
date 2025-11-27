@@ -24,17 +24,19 @@ export default function ClientFeedbackPanel({ claim, onSubmit, isLoading, isOpen
 
   const canProvideFeedback = claim.status === 'En Proceso' || claim.status === 'Resuelto'
   const canRate = claim.status === 'Resuelto'
-  const hasExistingFeedback = claim.client_feedback || claim.client_rating
+  const hasFinalFeedback = Boolean(claim.client_feedback || claim.client_rating)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError(null)
 
-    // Validar que no se haya enviado feedback previamente
-    if (hasExistingFeedback) {
-      setError('Ya has enviado retroalimentación para este reclamo.')
+    // Solo validar feedback previo si el reclamo está resuelto
+    if (canRate && hasFinalFeedback) {
+      setError('Ya has enviado retroalimentación final para este reclamo.')
       return
     }
+
+    const trimmedFeedback = feedback.trim()
 
     // Validaciones
     if (canRate && rating === 0) {
@@ -42,21 +44,24 @@ export default function ClientFeedbackPanel({ claim, onSubmit, isLoading, isOpen
       return
     }
 
-    if (!feedback.trim()) {
-      setError('Debes escribir un comentario.')
+    if (!canRate && !trimmedFeedback) {
+      setError('Debes escribir un comentario sobre el progreso.')
       return
     }
 
     try {
       await onSubmit({
-        feedback: feedback.trim(),
+        feedback: trimmedFeedback,
         rating: canRate ? rating : null
       })
-      // Limpiar formulario y cerrar modal después de enviar
+      // Limpiar formulario
       setFeedback('')
       setRating(0)
       setError(null)
-      onClose()
+      // Solo cerrar si es reclamo resuelto (mensaje final)
+      if (canRate) {
+        onClose()
+      }
     } catch (err) {
       setError(err.message || 'Error al enviar retroalimentación')
     }
@@ -138,7 +143,7 @@ export default function ClientFeedbackPanel({ claim, onSubmit, isLoading, isOpen
           {/* Campo de comentario */}
           <div>
             <label htmlFor="feedback" className="block text-sm font-medium text-slate-300 mb-2">
-              {canRate ? 'Comentario sobre la resolución *' : 'Comentario sobre el progreso *'}
+              {canRate ? 'Comentario sobre la resolución' : 'Comentario sobre el progreso *'}
             </label>
             <textarea
               id="feedback"

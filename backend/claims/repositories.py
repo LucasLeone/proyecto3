@@ -106,6 +106,7 @@ def create_area(name: str, description: str = "") -> Dict[str, Any]:
     payload = {
         "name": name.strip(),
         "description": description.strip(),
+        "sub_areas": [],  # Array de sub-áreas
         "is_active": True,
         "created_at": now,
         "updated_at": now,
@@ -141,6 +142,87 @@ def delete_area(area_id: str):
         {"_id": to_object_id(area_id)},
         {"$set": {"is_active": False, "updated_at": datetime.utcnow()}},
     )
+
+
+def add_sub_area(area_id: str, sub_area_name: str) -> Dict[str, Any]:
+    """Agregar una sub-área a un área"""
+    db = get_main_db()
+    area = get_area(area_id)
+    if not area:
+        raise ValueError("Área no encontrada")
+    
+    sub_area_name = sub_area_name.strip()
+    if not sub_area_name:
+        raise ValueError("El nombre de la sub-área no puede estar vacío")
+    
+    # Verificar que no exista ya una sub-área con ese nombre en esta área
+    sub_areas = area.get("sub_areas", [])
+    if any(sa["name"].lower() == sub_area_name.lower() for sa in sub_areas):
+        raise ValueError("Ya existe una sub-área con ese nombre en esta área")
+    
+    new_sub_area = {
+        "id": str(ObjectId()),
+        "name": sub_area_name,
+        "created_at": datetime.utcnow()
+    }
+    
+    db.areas.update_one(
+        {"_id": to_object_id(area_id)},
+        {
+            "$push": {"sub_areas": new_sub_area},
+            "$set": {"updated_at": datetime.utcnow()}
+        }
+    )
+    return get_area(area_id)
+
+
+def update_sub_area(area_id: str, sub_area_id: str, new_name: str) -> Dict[str, Any]:
+    """Actualizar el nombre de una sub-área"""
+    db = get_main_db()
+    area = get_area(area_id)
+    if not area:
+        raise ValueError("Área no encontrada")
+    
+    new_name = new_name.strip()
+    if not new_name:
+        raise ValueError("El nombre de la sub-área no puede estar vacío")
+    
+    # Verificar que la sub-área existe
+    sub_areas = area.get("sub_areas", [])
+    if not any(sa["id"] == sub_area_id for sa in sub_areas):
+        raise ValueError("Sub-área no encontrada")
+    
+    # Verificar que el nuevo nombre no esté duplicado
+    if any(sa["id"] != sub_area_id and sa["name"].lower() == new_name.lower() for sa in sub_areas):
+        raise ValueError("Ya existe una sub-área con ese nombre en esta área")
+    
+    db.areas.update_one(
+        {"_id": to_object_id(area_id), "sub_areas.id": sub_area_id},
+        {
+            "$set": {
+                "sub_areas.$.name": new_name,
+                "updated_at": datetime.utcnow()
+            }
+        }
+    )
+    return get_area(area_id)
+
+
+def delete_sub_area(area_id: str, sub_area_id: str) -> Dict[str, Any]:
+    """Eliminar una sub-área de un área"""
+    db = get_main_db()
+    area = get_area(area_id)
+    if not area:
+        raise ValueError("Área no encontrada")
+    
+    db.areas.update_one(
+        {"_id": to_object_id(area_id)},
+        {
+            "$pull": {"sub_areas": {"id": sub_area_id}},
+            "$set": {"updated_at": datetime.utcnow()}
+        }
+    )
+    return get_area(area_id)
 
 
 # -------- Projects --------
@@ -390,6 +472,7 @@ def update_claim_with_rules(
     area_id: Optional[str] = None,
     sub_area: Optional[str] = None,
     reason: Optional[str] = None,
+    resolution_description: Optional[str] = None,
 ) -> Dict[str, Any]:
     if claim["status"] == "Resuelto":
         raise ValueError("El reclamo está resuelto y no admite cambios")
@@ -401,6 +484,13 @@ def update_claim_with_rules(
 
     if status:
         _validate_status_transition(claim["status"], status)
+        
+        # Validar que si cambia a Resuelto, debe tener descripción de resolución
+        if status == "Resuelto":
+            if not resolution_description or not resolution_description.strip():
+                raise ValueError("Se requiere una descripción detallada de la resolución")
+            updates["resolution_description"] = resolution_description.strip()
+        
         updates["status"] = status
         events.append(
             {
@@ -506,7 +596,49 @@ def add_claim_action(*, claim_id: str, actor_id: str, actor_role: str, action_de
     return claim
 
 
-def update_client_feedback(
+def _serialize_feedback_message(doc: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    data = serialize(doc)
+    if not data:
+        return None
+    if doc and doc.get("claim_id"):
+        data["claim_id"] = str(doc["claim_id"])
+    if doc and doc.get("client_id"):
+        data["client_id"] = str(doc["client_id"])
+    data["type"] = doc.get("type", "progress")
+    data["message"] = doc.get("message")
+    data["rating"] = doc.get("rating")
+    data["created_at"] = doc.get("created_at")
+    return data
+
+
+def list_client_feedback_messages(claim_id: str) -> List[Dict[str, Any]]:
+    messages = (
+        get_main_db()
+        .client_feedback_messages
+        .find({"claim_id": to_object_id(claim_id)})
+        .sort("created_at", 1)
+    )
+
+    results: List[Dict[str, Any]] = []
+    client_cache: Dict[str, Optional[Dict[str, Any]]] = {}
+
+    for msg in messages:
+        serialized = _serialize_feedback_message(msg)
+        if not serialized:
+            continue
+        client_id = serialized.get("client_id")
+        if client_id and client_id not in client_cache:
+            client_cache[client_id] = get_user_by_id(client_id)
+        client = client_cache.get(client_id)
+        if client:
+            full_name = client.get("full_name") or client.get("company_name") or client.get("email")
+            serialized["client_name"] = full_name
+        results.append(serialized)
+
+    return results
+
+
+def submit_client_feedback(
     *,
     claim_id: str,
     client_id: str,
@@ -514,65 +646,105 @@ def update_client_feedback(
     feedback: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Permite al cliente agregar su calificación y comentario sobre el reclamo.
-    Solo disponible cuando el reclamo está en 'En Proceso' o 'Resuelto'.
-    Solo se permite enviar una vez.
+    Gestiona la retroalimentación del cliente según el estado del reclamo.
+    - En "En Proceso" permite enviar múltiples mensajes.
+    - En "Resuelto" solo permite un mensaje final con calificación.
     """
     claim = get_claim(claim_id)
     if not claim:
         raise ValueError("Reclamo no encontrado")
-    
-    # Verificar que el cliente es el dueño del reclamo
-    if str(claim["created_by"]) != str(client_id):
+
+    if str(claim.get("created_by")) != str(client_id):
         raise ValueError("No tiene permisos para calificar este reclamo")
-    
-    # Verificar que no se haya enviado retroalimentación previamente
-    if claim.get("client_feedback") or claim.get("client_rating"):
-        raise ValueError("Ya has enviado retroalimentación para este reclamo")
-    
-    # Verificar que el estado permita feedback
-    if claim["status"] not in ["En Proceso", "Resuelto"]:
-        raise ValueError("Solo puede dar feedback cuando el reclamo está en proceso o resuelto")
-    
-    # Si hay rating, validar que esté entre 1 y 5
-    if rating is not None and (rating < 1 or rating > 5):
-        raise ValueError("La calificación debe estar entre 1 y 5")
-    
-    updates = {"updated_at": datetime.utcnow()}
-    
-    if rating is not None:
-        updates["client_rating"] = rating
-    
-    if feedback is not None:
-        updates["client_feedback"] = feedback.strip() if feedback else None
-    
-    get_main_db().claims.update_one(
-        {"_id": to_object_id(claim_id)},
-        {"$set": updates}
-    )
-    
-    # Registrar evento según lo que se actualizó
-    details = {}
-    action_type = None
-    
-    if rating is not None and feedback:
-        action_type = "client_feedback_added"
-        details = {"rating": rating, "feedback": feedback.strip()}
-    elif rating is not None:
-        action_type = "client_rating_added"
-        details = {"rating": rating}
-    elif feedback:
-        action_type = "client_comment_added"
-        details = {"comment": feedback.strip()}
-    
-    if action_type:
-        log_claim_event(
-            claim_id=claim_id,
-            actor_id=client_id,
-            actor_role="client",
-            action=action_type,
-            visibility="public",
-            details=details,
+
+    status = claim.get("status")
+    if status == "Ingresado":
+        raise ValueError("No puede enviar retroalimentación mientras el reclamo está ingresado")
+
+    feedback_text = feedback.strip() if isinstance(feedback, str) else None
+    now = datetime.utcnow()
+
+    db = get_main_db()
+
+    if status == "En Proceso":
+        if rating is not None:
+            raise ValueError("La calificación solo puede enviarse cuando el reclamo está resuelto")
+        if not feedback_text:
+            raise ValueError("Debe escribir un comentario para enviar retroalimentación")
+
+        payload = {
+            "claim_id": to_object_id(claim_id),
+            "client_id": to_object_id(client_id),
+            "message": feedback_text,
+            "rating": None,
+            "type": "progress",
+            "created_at": now,
+        }
+        inserted = db.client_feedback_messages.insert_one(payload)
+        stored = db.client_feedback_messages.find_one({"_id": inserted.inserted_id})
+
+        # No registrar en el timeline, solo en la colección de mensajes
+        # log_claim_event(
+        #     claim_id=claim_id,
+        #     actor_id=client_id,
+        #     actor_role="client",
+        #     action="client_comment_added",
+        #     visibility="internal",
+        #     details={"comment": feedback_text},
+        # )
+
+        return {
+            "claim": claim,
+            "message": _serialize_feedback_message(stored),
+        }
+
+    if status == "Resuelto":
+        existing_final = db.client_feedback_messages.find_one(
+            {"claim_id": to_object_id(claim_id), "type": "final"}
         )
-    
-    return get_claim(claim_id)
+        if existing_final:
+            raise ValueError("Ya enviaste la retroalimentación final de este reclamo")
+
+        if rating is None:
+            raise ValueError("Debe proporcionar una calificación para el reclamo resuelto")
+        if rating < 1 or rating > 5:
+            raise ValueError("La calificación debe estar entre 1 y 5")
+
+        payload = {
+            "claim_id": to_object_id(claim_id),
+            "client_id": to_object_id(client_id),
+            "message": feedback_text,
+            "rating": rating,
+            "type": "final",
+            "created_at": now,
+        }
+        inserted = db.client_feedback_messages.insert_one(payload)
+        stored = db.client_feedback_messages.find_one({"_id": inserted.inserted_id})
+
+        updates: Dict[str, Any] = {
+            "client_rating": rating,
+            "client_feedback": feedback_text,
+            "updated_at": now,
+        }
+        db.claims.update_one({"_id": to_object_id(claim_id)}, {"$set": updates})
+
+        details: Dict[str, Any] = {"rating": rating}
+        if feedback_text:
+            details["feedback"] = feedback_text
+
+        # No registrar en el timeline, solo en la colección de mensajes
+        # log_claim_event(
+        #     claim_id=claim_id,
+        #     actor_id=client_id,
+        #     actor_role="client",
+        #     action="client_feedback_added",
+        #     visibility="internal",
+        #     details=details,
+        # )
+
+        return {
+            "claim": get_claim(claim_id),
+            "message": _serialize_feedback_message(stored),
+        }
+
+    raise ValueError("Estado del reclamo no admite retroalimentación")

@@ -46,5 +46,6 @@ def ensure_indexes():
     db.projects.create_index([("client_id", ASCENDING)], sparse=True)
     db.claims.create_index([("created_by", ASCENDING), ("created_at", ASCENDING)])
     db.claims.create_index([("status", ASCENDING)])
+    db.client_feedback_messages.create_index([("claim_id", ASCENDING), ("created_at", ASCENDING)])
     audit_db = get_audit_db()
     audit_db.claim_events.create_index([("claim_id", ASCENDING), ("created_at", ASCENDING)])

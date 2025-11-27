@@ -62,6 +62,17 @@ export const api = {
     return request(`/areas/${id}/`, { method: 'DELETE', token })
   },
 
+  // Sub-areas
+  addSubArea(token, areaId, name) {
+    return request(`/areas/${areaId}/sub-areas/`, { method: 'POST', body: { name }, token })
+  },
+  updateSubArea(token, areaId, subAreaId, name) {
+    return request(`/areas/${areaId}/sub-areas/${subAreaId}/`, { method: 'PUT', body: { name }, token })
+  },
+  deleteSubArea(token, areaId, subAreaId) {
+    return request(`/areas/${areaId}/sub-areas/${subAreaId}/`, { method: 'DELETE', token })
+  },
+
   // Employees
   listEmployees(token) {
     return request('/employees/', { token })
@@ -128,6 +139,9 @@ export const api = {
   },
   addAction(token, id, action_description) {
     return request(`/claims/${id}/actions/`, { method: 'POST', body: { action_description }, token })
+  },
+  getClientFeedbackMessages(token, id) {
+    return request(`/claims/${id}/feedback/`, { token })
   },
   addClientFeedback(token, id, { rating, feedback }) {
     console.log('addClientFeedback called with:', { token: token ? 'exists' : 'missing', id, rating, feedback })

@@ -13,26 +13,31 @@ from .repositories import (
     ALLOWED_STATUSES,
     add_claim_action,
     add_claim_comment,
+    add_sub_area,
     create_claim,
     create_area,
     create_project,
     create_user,
     delete_area,
     delete_project,
+    delete_sub_area,
     get_area,
     get_claim,
     get_project,
     get_user_by_email,
     get_user_by_id,
     list_claim_events,
+    list_client_feedback_messages,
     list_claims,
     list_areas,
     list_projects,
+    submit_client_feedback,
     list_users,
     soft_delete_user,
     update_area,
     update_claim_with_rules,
     update_project,
+    update_sub_area,
     update_user,
     verify_password,
 )
@@ -40,6 +45,8 @@ from .serializers import (
     AreaSerializer,
     ClaimSerializer,
     ClaimUpdateSerializer,
+    ClientFeedbackMessageSerializer,
+    ClientFeedbackSerializer,
     ClientSerializer,
     EmployeeSerializer,
     LoginSerializer,
@@ -144,6 +151,46 @@ class AreaDetailView(APIView):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SubAreaView(APIView):
+    """Gestión de sub-áreas dentro de un área"""
+    permission_classes = [IsAdmin]
+
+    def post(self, request, area_id: str):
+        """Agregar una sub-área a un área"""
+        sub_area_name = request.data.get("name", "").strip()
+        if not sub_area_name:
+            return Response({"detail": "El nombre de la sub-área es requerido"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            area = add_sub_area(area_id, sub_area_name)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response(AreaSerializer(area).data, status=status.HTTP_201_CREATED)
+
+    def put(self, request, area_id: str, sub_area_id: str):
+        """Actualizar una sub-área"""
+        new_name = request.data.get("name", "").strip()
+        if not new_name:
+            return Response({"detail": "El nombre de la sub-área es requerido"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            area = update_sub_area(area_id, sub_area_id, new_name)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response(AreaSerializer(area).data)
+
+    def delete(self, request, area_id: str, sub_area_id: str):
+        """Eliminar una sub-área"""
+        try:
+            area = delete_sub_area(area_id, sub_area_id)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response(AreaSerializer(area).data)
 
 
 class EmployeeListCreateView(APIView):
@@ -467,6 +514,7 @@ class ClaimDetailView(APIView):
                 area_id=serializer.validated_data.get("area_id") if "area_id" in serializer.validated_data else None,
                 sub_area=serializer.validated_data.get("sub_area") if "sub_area" in serializer.validated_data else None,
                 reason=serializer.validated_data.get("reason"),
+                resolution_description=serializer.validated_data.get("resolution_description"),
             )
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -526,10 +574,22 @@ class ClientFeedbackView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
-    def post(self, request, claim_id: str):
-        from .repositories import update_client_feedback
-        from .serializers import ClientFeedbackSerializer
+    def get(self, request, claim_id: str):
+        claim = get_claim(claim_id)
+        if not claim:
+            return Response(status=status.HTTP_404_NOT_FOUND)
 
+        role = getattr(request.user, "role", None)
+        if role == "client" and str(claim.get("created_by")) != request.user.id:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        if role not in ("client", "admin", "employee"):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
+        messages = list_client_feedback_messages(claim_id)
+        serializer = ClientFeedbackMessageSerializer(messages, many=True)
+        return Response(serializer.data)
+
+    def post(self, request, claim_id: str):
         # Verificar que el usuario es un cliente
         if getattr(request.user, "role", None) != "client":
             return Response(
@@ -542,7 +602,7 @@ class ClientFeedbackView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            updated_claim = update_client_feedback(
+            result = submit_client_feedback(
                 claim_id=claim_id,
                 client_id=request.user.id,
                 rating=serializer.validated_data.get("rating"),
@@ -551,11 +611,27 @@ class ClientFeedbackView(APIView):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        data = ClaimSerializer(updated_claim).data
-        data["project_id"] = str(updated_claim["project_id"])
-        data["area_id"] = str(updated_claim["area_id"]) if updated_claim.get("area_id") else None
-        data["created_by"] = str(updated_claim["created_by"])
-        return Response(data)
+        claim = result.get("claim")
+        message = result.get("message")
+
+        claim_data = ClaimSerializer(claim).data if claim else {}
+        if claim:
+            claim_data["project_id"] = str(claim["project_id"])
+            claim_data["area_id"] = str(claim["area_id"]) if claim.get("area_id") else None
+            claim_data["created_by"] = str(claim["created_by"])
+
+        message_data = (
+            ClientFeedbackMessageSerializer(message).data
+            if message
+            else None
+        )
+
+        return Response(
+            {
+                "claim": claim_data,
+                "message": message_data,
+            }
+        )
 
 
 class ClaimTimelineView(APIView):
