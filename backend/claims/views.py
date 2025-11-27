@@ -41,6 +41,7 @@ from .repositories import (
     update_user,
     verify_password,
 )
+from .db import to_object_id
 from .serializers import (
     AreaSerializer,
     ClaimSerializer,
@@ -647,3 +648,600 @@ class ClaimTimelineView(APIView):
         public_only = role == "client"
         events = list_claim_events(claim_id, public_only=public_only)
         return Response(events)
+
+
+class StatisticsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .db import get_main_db
+        from datetime import datetime
+        
+        db = get_main_db()
+        role = getattr(request.user, "role", None)
+        
+        query = {}
+        if role == "client":
+            query["created_by"] = to_object_id(request.user.id)
+        elif role == "employee":
+            query["area_id"] = request.user.area_id
+        
+        client_id = request.GET.get("client_id")
+        employee_id = request.GET.get("employee_id")
+        project_id = request.GET.get("project_type")
+        area_id = request.GET.get("area_id")
+        claim_status = request.GET.get("status")
+        start_date = request.GET.get("start_date")
+        end_date = request.GET.get("end_date")
+        
+        if client_id and role == "admin":
+            query["created_by"] = to_object_id(client_id)
+        if employee_id and role == "admin":
+            employee = get_user_by_id(employee_id)
+            if employee and employee.get("area_id"):
+                query["area_id"] = employee["area_id"]
+        if project_id:
+            query["project_id"] = to_object_id(project_id)
+        if area_id:
+            query["area_id"] = to_object_id(area_id)
+        if claim_status:
+            query["status"] = claim_status
+        if start_date:
+            query.setdefault("created_at", {})["$gte"] = datetime.fromisoformat(start_date)
+        if end_date:
+            query.setdefault("created_at", {})["$lte"] = datetime.fromisoformat(end_date)
+        
+        pipeline = [
+            {"$match": query},
+            {"$group": {
+                "_id": "$status",
+                "count": {"$sum": 1}
+            }}
+        ]
+        
+        results = list(db.claims.aggregate(pipeline))
+        by_status = {item["_id"]: item["count"] for item in results}
+        
+        return Response({
+            "by_status": by_status,
+            "total": sum(by_status.values())
+        })
+
+
+class StatisticsByMonthView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .db import get_main_db
+        from datetime import datetime
+        
+        db = get_main_db()
+        role = getattr(request.user, "role", None)
+        year = int(request.GET.get("year", datetime.now().year))
+        
+        query = {
+            "created_at": {
+                "$gte": datetime(year, 1, 1),
+                "$lt": datetime(year + 1, 1, 1)
+            }
+        }
+        
+        if role == "client":
+            query["created_by"] = to_object_id(request.user.id)
+        elif role == "employee":
+            query["area_id"] = request.user.area_id
+        
+        client_id = request.GET.get("client_id")
+        employee_id = request.GET.get("employee_id")
+        
+        if client_id and role == "admin":
+            query["created_by"] = to_object_id(client_id)
+        if employee_id and role == "admin":
+            employee = get_user_by_id(employee_id)
+            if employee and employee.get("area_id"):
+                query["area_id"] = employee["area_id"]
+        
+        pipeline = [
+            {"$match": query},
+            {"$group": {
+                "_id": {"$month": "$created_at"},
+                "count": {"$sum": 1},
+                "resolved": {
+                    "$sum": {"$cond": [{"$eq": ["$status", "resolved"]}, 1, 0]}
+                }
+            }},
+            {"$sort": {"_id": 1}}
+        ]
+        
+        results = list(db.claims.aggregate(pipeline))
+        months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+        
+        data = []
+        for item in results:
+            month_index = item["_id"] - 1
+            data.append({
+                "month": months[month_index] if month_index < len(months) else str(item["_id"]),
+                "count": item["count"],
+                "resolved": item["resolved"]
+            })
+        
+        return Response(data)
+
+
+class StatisticsByStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .db import get_main_db
+        from datetime import datetime
+        
+        db = get_main_db()
+        role = getattr(request.user, "role", None)
+        
+        query = {}
+        if role == "client":
+            query["created_by"] = to_object_id(request.user.id)
+        
+        client_id = request.GET.get("client_id")
+        employee_id = request.GET.get("employee_id")
+        project_id = request.GET.get("project_id")
+        
+        if client_id and role in ["admin", "employee"]:
+            query["created_by"] = to_object_id(client_id)
+        if employee_id and role == "admin":
+            employee = get_user_by_id(employee_id)
+            if employee and employee.get("area_id"):
+                query["area_id"] = employee["area_id"]
+        if project_id:
+            query["project_id"] = to_object_id(project_id)
+        
+        pipeline = [
+            {"$match": query},
+            {"$group": {
+                "_id": "$status",
+                "count": {"$sum": 1}
+            }}
+        ]
+        
+        results = list(db.claims.aggregate(pipeline))
+        status_translations = {
+            "pending": "Pendiente",
+            "in_progress": "En Progreso",
+            "resolved": "Resuelto",
+            "cancelled": "Cancelado"
+        }
+        
+        data = []
+        for item in results:
+            data.append({
+                "status": status_translations.get(item["_id"], item["_id"]),
+                "count": item["count"]
+            })
+        
+        return Response(data)
+
+
+class StatisticsByTypeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .db import get_main_db
+        from datetime import datetime
+        
+        db = get_main_db()
+        role = getattr(request.user, "role", None)
+        
+        query = {}
+        if role == "client":
+            query["created_by"] = to_object_id(request.user.id)
+        
+        client_id = request.GET.get("client_id")
+        employee_id = request.GET.get("employee_id")
+        area_id = request.GET.get("area_id")
+        start_date = request.GET.get("start_date")
+        end_date = request.GET.get("end_date")
+        
+        if client_id and role in ["admin", "employee"]:
+            query["created_by"] = to_object_id(client_id)
+        if employee_id and role in ["admin", "employee"]:
+            employee = get_user_by_id(employee_id)
+            if employee and employee.get("area_id"):
+                query["area_id"] = employee["area_id"]
+        if area_id:
+            query["area_id"] = to_object_id(area_id)
+        if start_date:
+            query.setdefault("created_at", {})["$gte"] = datetime.fromisoformat(start_date)
+        if end_date:
+            query.setdefault("created_at", {})["$lte"] = datetime.fromisoformat(end_date)
+        
+        pipeline = [
+            {"$match": query},
+            {"$group": {
+                "_id": "$claim_type",
+                "count": {"$sum": 1}
+            }},
+            {"$sort": {"count": -1}},
+            {"$limit": 10}
+        ]
+        
+        results = list(db.claims.aggregate(pipeline))
+        data = []
+        for item in results:
+            data.append({
+                "type": item["_id"],
+                "count": item["count"]
+            })
+        
+        return Response(data)
+
+
+class StatisticsByAreaView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .db import get_main_db
+        from datetime import datetime
+        
+        db = get_main_db()
+        
+        query = {}
+        start_date = request.GET.get("start_date")
+        end_date = request.GET.get("end_date")
+        
+        if start_date:
+            query.setdefault("created_at", {})["$gte"] = datetime.fromisoformat(start_date)
+        if end_date:
+            query.setdefault("created_at", {})["$lte"] = datetime.fromisoformat(end_date)
+        
+        pipeline = [
+            {"$match": query},
+            {"$group": {
+                "_id": "$area_id",
+                "count": {"$sum": 1}
+            }},
+            {"$sort": {"count": -1}}
+        ]
+        
+        results = list(db.claims.aggregate(pipeline))
+        data = []
+        for item in results:
+            if item["_id"]:
+                area = get_area(item["_id"])
+                area_name = area["name"] if area else "Sin área"
+            else:
+                area_name = "Sin área"
+            
+            data.append({
+                "area": area_name,
+                "count": item["count"]
+            })
+        
+        return Response(data)
+
+
+class StatisticsByProjectView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .db import get_main_db
+        from datetime import datetime
+        
+        db = get_main_db()
+        role = getattr(request.user, "role", None)
+        
+        query = {}
+        if role == "client":
+            query["created_by"] = to_object_id(request.user.id)
+        
+        client_id = request.GET.get("client_id")
+        year = request.GET.get("year")
+        month = request.GET.get("month")
+        start_date = request.GET.get("start_date")
+        end_date = request.GET.get("end_date")
+        
+        if client_id and role == "admin":
+            query["created_by"] = to_object_id(client_id)
+        
+        # Filtros por año y mes
+        if year:
+            year_int = int(year)
+            if month:
+                month_int = int(month)
+                # Específico mes y año
+                query.setdefault("created_at", {})["$gte"] = datetime(year_int, month_int, 1)
+                if month_int == 12:
+                    query["created_at"]["$lt"] = datetime(year_int + 1, 1, 1)
+                else:
+                    query["created_at"]["$lt"] = datetime(year_int, month_int + 1, 1)
+            else:
+                # Solo año
+                query.setdefault("created_at", {})["$gte"] = datetime(year_int, 1, 1)
+                query["created_at"]["$lt"] = datetime(year_int + 1, 1, 1)
+        # Filtros alternativos por rango de fechas
+        elif start_date:
+            query.setdefault("created_at", {})["$gte"] = datetime.fromisoformat(start_date)
+        if end_date:
+            query.setdefault("created_at", {})["$lte"] = datetime.fromisoformat(end_date)
+        
+        pipeline = [
+            {"$match": query},
+            {"$group": {
+                "_id": "$project_id",
+                "count": {"$sum": 1}
+            }},
+            {"$sort": {"count": -1}},
+            {"$limit": 10}
+        ]
+        
+        results = list(db.claims.aggregate(pipeline))
+        data = []
+        for item in results:
+            if item["_id"]:
+                project = get_project(item["_id"])
+                project_name = project["name"] if project else "Sin proyecto"
+            else:
+                project_name = "Sin proyecto"
+            
+            data.append({
+                "project": project_name,
+                "count": item["count"]
+            })
+        
+        return Response(data)
+
+
+class StatisticsAverageResolutionTimeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .db import get_main_db
+        
+        db = get_main_db()
+        role = getattr(request.user, "role", None)
+        
+        query = {"status": "resolved", "resolved_at": {"$exists": True}}
+        if role == "client":
+            query["created_by"] = to_object_id(request.user.id)
+        elif role == "employee":
+            query["area_id"] = request.user.area_id
+        
+        employee_id = request.GET.get("employee_id")
+        area_id = request.GET.get("area_id")
+        claim_type = request.GET.get("claim_type")
+        
+        if employee_id and role == "admin":
+            employee = get_user_by_id(employee_id)
+            if employee and employee.get("area_id"):
+                query["area_id"] = employee["area_id"]
+        if area_id:
+            query["area_id"] = to_object_id(area_id)
+        if claim_type:
+            query["claim_type"] = claim_type
+        
+        claims = list(db.claims.find(query))
+        
+        if not claims:
+            return Response({
+                "average": "0h",
+                "average_hours": 0,
+                "trend": "neutral",
+                "trendValue": "0%"
+            })
+        
+        total_hours = 0
+        for claim in claims:
+            if claim.get("resolved_at") and claim.get("created_at"):
+                diff = claim["resolved_at"] - claim["created_at"]
+                total_hours += diff.total_seconds() / 3600
+        
+        avg_hours = total_hours / len(claims) if claims else 0
+        
+        return Response({
+            "average": f"{int(avg_hours)}h",
+            "average_hours": round(avg_hours, 2),
+            "trend": "neutral",
+            "trendValue": "0%"
+        })
+
+
+class StatisticsKPIsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .db import get_main_db
+        from datetime import datetime
+        
+        db = get_main_db()
+        role = getattr(request.user, "role", None)
+        
+        query = {}
+        if role == "client":
+            query["created_by"] = to_object_id(request.user.id)
+        elif role == "employee":
+            query["area_id"] = request.user.area_id
+        
+        client_id = request.GET.get("client_id")
+        employee_id = request.GET.get("employee_id")
+        start_date = request.GET.get("start_date")
+        end_date = request.GET.get("end_date")
+        
+        if client_id and role == "admin":
+            query["created_by"] = to_object_id(client_id)
+        if employee_id and role == "admin":
+            employee = get_user_by_id(employee_id)
+            if employee and employee.get("area_id"):
+                query["area_id"] = employee["area_id"]
+        if start_date:
+            query.setdefault("created_at", {})["$gte"] = datetime.fromisoformat(start_date)
+        if end_date:
+            query.setdefault("created_at", {})["$lte"] = datetime.fromisoformat(end_date)
+        
+        total_claims = db.claims.count_documents(query)
+        
+        pending_query = query.copy()
+        pending_query["status"] = "pending"
+        pending_claims = db.claims.count_documents(pending_query)
+        
+        resolved_query = query.copy()
+        resolved_query["status"] = "resolved"
+        resolved_claims = db.claims.count_documents(resolved_query)
+        
+        data = {
+            "totalClaims": total_claims,
+            "totalTrend": "neutral",
+            "totalTrendValue": "0%",
+            "pendingClaims": pending_claims,
+            "pendingTrend": "neutral",
+            "pendingTrendValue": "0%",
+            "resolvedClaims": resolved_claims,
+            "resolvedTrend": "neutral",
+            "resolvedTrendValue": "0%",
+        }
+        
+        if role == "employee":
+            assigned_query = query.copy()
+            assigned_to_me = db.claims.count_documents(assigned_query)
+            
+            resolved_by_me_query = assigned_query.copy()
+            resolved_by_me_query["status"] = "resolved"
+            resolved_by_me = db.claims.count_documents(resolved_by_me_query)
+            
+            data["assignedToMe"] = assigned_to_me
+            data["resolvedByMe"] = resolved_by_me
+            data["avgTimeMe"] = "0h"
+        
+        return Response(data)
+
+
+class StatisticsRatingsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .db import get_main_db
+        from datetime import datetime
+        
+        db = get_main_db()
+        role = getattr(request.user, "role", None)
+        
+        query = {"type": "final", "rating": {"$exists": True, "$ne": None}}
+        
+        client_id = request.GET.get("client_id")
+        year = request.GET.get("year")
+        month = request.GET.get("month")
+        start_date = request.GET.get("start_date")
+        end_date = request.GET.get("end_date")
+        
+        # Filtrar por cliente específico si se proporciona
+        if client_id:
+            query["client_id"] = to_object_id(client_id)
+        else:
+            # Si NO se seleccionó un cliente, filtrar por rol
+            if role == "client":
+                query["client_id"] = to_object_id(request.user.id)
+            # Para admin y employee sin cliente seleccionado, mostrar todos (no agregar filtro adicional)
+        
+        # Filtros por año y mes
+        if year:
+            year_int = int(year)
+            if month:
+                month_int = int(month)
+                # Específico mes y año
+                query.setdefault("created_at", {})["$gte"] = datetime(year_int, month_int, 1)
+                if month_int == 12:
+                    query["created_at"]["$lt"] = datetime(year_int + 1, 1, 1)
+                else:
+                    query["created_at"]["$lt"] = datetime(year_int, month_int + 1, 1)
+            else:
+                # Solo año
+                query.setdefault("created_at", {})["$gte"] = datetime(year_int, 1, 1)
+                query["created_at"]["$lt"] = datetime(year_int + 1, 1, 1)
+        # Filtros alternativos por rango de fechas
+        elif start_date:
+            query.setdefault("created_at", {})["$gte"] = datetime.fromisoformat(start_date)
+        if end_date:
+            query.setdefault("created_at", {})["$lte"] = datetime.fromisoformat(end_date)
+        
+        pipeline = [
+            {"$match": query},
+            {"$group": {
+                "_id": "$rating",
+                "count": {"$sum": 1}
+            }},
+            {"$sort": {"_id": 1}}
+        ]
+        
+        result = list(db.client_feedback_messages.aggregate(pipeline))
+        
+        # Asegurar que siempre haya 5 valores (1-5 estrellas)
+        ratings_dict = {i: 0 for i in range(1, 6)}
+        for item in result:
+            if item["_id"] and 1 <= item["_id"] <= 5:
+                ratings_dict[item["_id"]] = item["count"]
+        
+        data = [
+            {"rating": rating, "count": count}
+            for rating, count in ratings_dict.items()
+        ]
+        
+        return Response(data)
+
+
+class StatisticsByEmployeeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .db import get_main_db
+        from datetime import datetime
+        
+        db = get_main_db()
+        role = getattr(request.user, "role", None)
+        
+        query = {}
+        area_id = request.GET.get("area_id")
+        start_date = request.GET.get("start_date")
+        end_date = request.GET.get("end_date")
+        
+        if area_id:
+            query["area_id"] = to_object_id(area_id)
+        
+        if start_date:
+            query.setdefault("created_at", {})["$gte"] = datetime.fromisoformat(start_date)
+        if end_date:
+            query.setdefault("created_at", {})["$lte"] = datetime.fromisoformat(end_date)
+        
+        # Obtener todos los empleados
+        employees = list(db.users.find({"role": "employee", "is_active": {"$ne": False}}))
+        
+        data = []
+        for employee in employees:
+            employee_query = query.copy()
+            employee_query["area_id"] = employee.get("area_id")
+            
+            if not employee_query.get("area_id"):
+                continue
+            
+            # Contar reclamos del área del empleado
+            total = db.claims.count_documents(employee_query)
+            
+            # Contar reclamos resueltos
+            resolved_query = employee_query.copy()
+            resolved_query["status"] = "Resuelto"
+            resolved = db.claims.count_documents(resolved_query)
+            
+            # Obtener nombre del área
+            area = db.areas.find_one({"_id": employee_query["area_id"]})
+            area_name = area["name"] if area else "Sin área"
+            
+            data.append({
+                "employee": employee.get("full_name") or employee.get("email"),
+                "area": area_name,
+                "total": total,
+                "resolved": resolved
+            })
+        
+        # Ordenar por total de reclamos descendente
+        data.sort(key=lambda x: x["total"], reverse=True)
+        
+        return Response(data)
+

@@ -17,6 +17,16 @@ from .views import (
     ProjectDetailView,
     ProjectListCreateView,
     SubAreaView,
+    StatisticsView,
+    StatisticsByMonthView,
+    StatisticsByStatusView,
+    StatisticsByTypeView,
+    StatisticsByAreaView,
+    StatisticsByProjectView,
+    StatisticsAverageResolutionTimeView,
+    StatisticsKPIsView,
+    StatisticsRatingsView,
+    StatisticsByEmployeeView,
 )
 
 urlpatterns = [
@@ -37,4 +47,14 @@ urlpatterns = [
     path("claims/<str:claim_id>/comments/", ClaimCommentView.as_view(), name="claim-comment"),
     path("claims/<str:claim_id>/feedback/", ClientFeedbackView.as_view(), name="client-feedback"),
     path("claims/<str:claim_id>/timeline/", ClaimTimelineView.as_view(), name="claim-timeline"),
+    path("statistics/", StatisticsView.as_view(), name="statistics"),
+    path("statistics/by-month/", StatisticsByMonthView.as_view(), name="statistics-by-month"),
+    path("statistics/by-status/", StatisticsByStatusView.as_view(), name="statistics-by-status"),
+    path("statistics/by-type/", StatisticsByTypeView.as_view(), name="statistics-by-type"),
+    path("statistics/by-area/", StatisticsByAreaView.as_view(), name="statistics-by-area"),
+    path("statistics/by-project/", StatisticsByProjectView.as_view(), name="statistics-by-project"),
+    path("statistics/avg-resolution-time/", StatisticsAverageResolutionTimeView.as_view(), name="statistics-avg-time"),
+    path("statistics/kpis/", StatisticsKPIsView.as_view(), name="statistics-kpis"),
+    path("statistics/ratings/", StatisticsRatingsView.as_view(), name="statistics-ratings"),
+    path("statistics/by-employee/", StatisticsByEmployeeView.as_view(), name="statistics-by-employee"),
 ]

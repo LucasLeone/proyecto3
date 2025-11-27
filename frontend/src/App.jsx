@@ -9,6 +9,7 @@ import { ClientsPanel } from './components/ClientsPanel'
 import { ProjectsPanel } from './components/ProjectsPanel'
 import { ClaimsPanel } from './components/ClaimsPanel'
 import { MyClaimsPanel } from './components/MyClaimsPanel'
+import StatisticsPanel from './components/StatisticsPanel'
 import { useAuth } from './hooks/useAuth'
 
 function App() {
@@ -74,6 +75,7 @@ function App() {
       return [
         { id: 'overview', label: 'Resumen' },
         { id: 'claims', label: 'Reclamos' },
+        { id: 'statistics', label: 'Estadísticas' },
         { id: 'areas', label: 'Áreas' },
         { id: 'employees', label: 'Empleados' },
         { id: 'clients', label: 'Clientes' },
@@ -84,6 +86,7 @@ function App() {
       return [
         { id: 'overview', label: 'Resumen' },
         { id: 'claims', label: 'Reclamos' },
+        { id: 'statistics', label: 'Estadísticas' },
         { id: 'projects', label: 'Proyectos' },
       ]
     }
@@ -91,6 +94,7 @@ function App() {
       return [
         { id: 'overview', label: 'Resumen' },
         { id: 'claims', label: 'Mis Reclamos' },
+        { id: 'statistics', label: 'Estadísticas' },
         { id: 'projects', label: 'Mis Proyectos' },
       ]
     }
@@ -137,6 +141,7 @@ function App() {
         <ClaimsPanel token={token} areas={areas} projects={projects} clients={clients} user={user} />
       ) : null}
       {activeTab === 'claims' && isClient ? <MyClaimsPanel token={token} projects={projects} areas={areas} /> : null}
+      {activeTab === 'statistics' ? <StatisticsPanel /> : null}
     </Layout>
   )
 }
