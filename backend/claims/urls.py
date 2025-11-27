@@ -16,12 +16,15 @@ from .views import (
     LoginView,
     ProjectDetailView,
     ProjectListCreateView,
+    SubAreaView,
 )
 
 urlpatterns = [
     path("auth/login/", LoginView.as_view(), name="login"),
     path("areas/", AreaListCreateView.as_view(), name="area-list"),
     path("areas/<str:area_id>/", AreaDetailView.as_view(), name="area-detail"),
+    path("areas/<str:area_id>/sub-areas/", SubAreaView.as_view(), name="sub-area-create"),
+    path("areas/<str:area_id>/sub-areas/<str:sub_area_id>/", SubAreaView.as_view(), name="sub-area-detail"),
     path("employees/", EmployeeListCreateView.as_view(), name="employee-list"),
     path("employees/<str:user_id>/", EmployeeDetailView.as_view(), name="employee-detail"),
     path("clients/", ClientListCreateView.as_view(), name="client-list"),
