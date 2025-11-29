@@ -1,0 +1,19 @@
+[run]
+source = claims
+omit = 
+    */tests/*
+    */migrations/*
+    */__pycache__/*
+    */management/*
+    */admin.py
+    */apps.py
+    */wsgi.py
+    */asgi.py
+
+[report]
+precision = 2
+show_missing = True
+skip_covered = False
+
+[html]
+directory = htmlcov
