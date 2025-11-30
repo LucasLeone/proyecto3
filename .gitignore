@@ -16,6 +16,15 @@ dist/
 # Django static collection
 backend/staticfiles/
 
+# Coverage reports
+frontend/coverage/
+frontend/coverage-integration/
+backend/htmlcov/
+backend/.coverage
+backend/coverage.xml
+*.coverage
+.pytest_cache/
+
 # IDE
 .idea/
 .vscode/

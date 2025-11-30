@@ -5,5 +5,25 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/test/setup.js',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'lcov', 'json'],
+      exclude: [
+        'node_modules/',
+        'src/test/',
+        '**/*.config.js',
+        '**/*.config.cjs',
+        '**/dist/',
+        'eslint-analysis.js',
+      ],
+      thresholds: {
+        lines: 70,
+        functions: 70,
+        branches: 70,
+        statements: 70,
+      },
+    },
   },
 })
